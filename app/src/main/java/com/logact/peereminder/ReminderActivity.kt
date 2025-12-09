@@ -1,0 +1,197 @@
+package com.logact.peereminder
+
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+import com.logact.peereminder.alarm.AlarmScheduler
+import com.logact.peereminder.data.SharedPrefsManager
+
+class ReminderActivity : AppCompatActivity() {
+    private lateinit var prefsManager: SharedPrefsManager
+    private lateinit var alarmScheduler: AlarmScheduler
+    private var mediaPlayer: MediaPlayer? = null
+    private var vibrator: Vibrator? = null
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // Configure to show over lock screen and wake device
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
+        
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            // These flags are handled by setShowWhenLocked and setTurnScreenOn
+            // but we keep FLAG_KEEP_SCREEN_ON for older versions
+        }
+        
+        prefsManager = SharedPrefsManager.getInstance(this)
+        alarmScheduler = AlarmScheduler(this)
+        
+        // Handle back button press
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                dismissAlarm()
+            }
+        })
+        
+        setupUI()
+        startAlarm()
+    }
+    
+    private fun setupUI() {
+        // Create UI programmatically for simplicity and reliability
+        val rootLayout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setBackgroundColor(android.graphics.Color.BLACK)
+            setPadding(48, 48, 48, 48)
+        }
+        
+        // Large emoji/icon
+        val iconText = TextView(this).apply {
+            text = "🚽"
+            textSize = 80f
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 48, 0, 48)
+        }
+        
+        // Main message
+        val messageText = TextView(this).apply {
+            text = "Time to Go!"
+            textSize = 36f // Large font
+            setTextColor(android.graphics.Color.WHITE)
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 24, 0, 48)
+        }
+        
+        // Dismiss button
+        val dismissButton = Button(this).apply {
+            text = "I HEARD IT"
+            textSize = 24f // Large font
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.parseColor("#4CAF50")) // Green
+            setPadding(64, 32, 64, 32)
+            minHeight = 120 // Large touch target
+            minWidth = 400
+            
+            setOnClickListener {
+                dismissAlarm()
+            }
+        }
+        
+        rootLayout.addView(iconText)
+        rootLayout.addView(messageText)
+        rootLayout.addView(dismissButton)
+        
+        setContentView(rootLayout)
+    }
+    
+    private fun startAlarm() {
+        val alertType = prefsManager.alertType
+        
+        // Play sound if needed
+        if (alertType == "SOUND" || alertType == "BOTH") {
+            playSound()
+        }
+        
+        // Vibrate if needed
+        if (alertType == "VIBRATION" || alertType == "BOTH") {
+            startVibration()
+        }
+    }
+    
+    private fun playSound() {
+        try {
+            val soundUri = prefsManager.customSoundUri?.let { Uri.parse(it) }
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            
+            mediaPlayer = MediaPlayer.create(this, soundUri)
+            mediaPlayer?.apply {
+                isLooping = true
+                setVolume(1.0f, 1.0f)
+                start()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Fallback to default alarm sound
+            try {
+                val defaultUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                mediaPlayer = MediaPlayer.create(this, defaultUri)
+                mediaPlayer?.apply {
+                    isLooping = true
+                    setVolume(1.0f, 1.0f)
+                    start()
+                }
+            } catch (e2: Exception) {
+                e2.printStackTrace()
+            }
+        }
+    }
+    
+    private fun startVibration() {
+        try {
+            vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(VIBRATOR_SERVICE) as Vibrator
+            }
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val vibrationEffect = VibrationEffect.createWaveform(
+                    longArrayOf(0, 500, 200, 500), // Pattern: wait, vibrate, wait, vibrate
+                    0 // Repeat from index 0
+                )
+                vibrator?.vibrate(vibrationEffect)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(longArrayOf(0, 500, 200, 500), 0)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    private fun dismissAlarm() {
+        // Stop sound
+        mediaPlayer?.stop()
+        mediaPlayer?.release()
+        mediaPlayer = null
+        
+        // Stop vibration
+        vibrator?.cancel()
+        vibrator = null
+        
+        // Reschedule next alarm
+        if (prefsManager.isActive) {
+            alarmScheduler.scheduleNextAlarm()
+        }
+        
+        // Close activity
+        finish()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaPlayer?.stop()
+        mediaPlayer?.release()
+        mediaPlayer = null
+        vibrator?.cancel()
+    }
+}
+

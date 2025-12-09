@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">Pee Reminder</string>
+    <string name="status_active">ACTIVE</string>
+    <string name="status_paused">PAUSED</string>
+    <string name="start_reminder">START REMINDER</string>
+    <string name="pause_reminder">PAUSE REMINDER</string>
+    <string name="next_reminder_at">Next Reminder At:</string>
+    <string name="time_remaining">Time Remaining:</string>
+    <string name="settings_title">Settings</string>
+    <string name="interval_setting">Reminder Interval</string>
+    <string name="quiet_hours">Quiet Hours</string>
+    <string name="quiet_hours_enabled">Disable reminders overnight</string>
+    <string name="alert_type">Alert Type</string>
+    <string name="alert_sound">Sound</string>
+    <string name="alert_vibration">Vibration</string>
+    <string name="alert_both">Both</string>
+    <string name="alarm_sound">Alarm Sound</string>
+    <string name="default_sound">Default System Sound</string>
+    <string name="permission_required">Permission Required</string>
+    <string name="exact_alarm_permission_message">This app needs permission to schedule exact alarms. Please grant this permission in Settings.</string>
+    <string name="open_settings">Open Settings</string>
+    <string name="cancel">Cancel</string>
+</resources>
