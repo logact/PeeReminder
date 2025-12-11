@@ -49,26 +49,9 @@ class MainActivity : ComponentActivity() {
         prefsManager = SharedPrefsManager.getInstance(this)
         alarmScheduler = AlarmScheduler(this)
         
-        // Create notification channel early (before alarms fire)
-        // This ensures the channel exists when the alarm triggers in background
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            val channel = android.app.NotificationChannel(
-                "pee_reminder_alarm_channel",
-                "Pee Reminder Alarms",
-                android.app.NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Notifications for pee reminders"
-                enableLights(true)
-                enableVibration(true)
-                setShowBadge(false)
-                setBypassDnd(true)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                }
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
+        // Note: Notification channel is created in AlarmReceiver.createNotificationChannel()
+        // with IMPORTANCE_MAX for full-screen intent support
+        // We don't create it here to avoid conflicts
         
         // Request notification permission on first launch (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -88,7 +71,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onSettingsClick = {
-                        startActivity(Intent(this, SettingsActivity::class.java))
+                        startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
                     },
                     onRequestNotificationPermission = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -96,7 +79,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onRequestBatteryOptimization = {
-                        PermissionHelper.openBatteryOptimizationSettings(this)
+                        PermissionHelper.openBatteryOptimizationSettings(this@MainActivity)
                     }
                 )
             }
@@ -544,6 +527,30 @@ fun MainScreen(
                             Text("2. You'll see a popup - tap 'Allow'", style = MaterialTheme.typography.bodySmall, color = BrightText)
                             Text("3. If no popup, find 'Pee Reminder' in the list", style = MaterialTheme.typography.bodySmall, color = BrightText)
                             Text("4. Change to 'Don't optimize' or 'Not optimized'", style = MaterialTheme.typography.bodySmall, color = BrightText)
+                            
+                            HorizontalDivider(color = DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
+                            
+                            Text(
+                                text = "For Vivo/OriginOS 4 (REQUIRES MULTIPLE SETTINGS):",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = BrightYellow,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("1. Autostart: Settings → Apps → Pee Reminder → Autostart → Enable", 
+                                style = MaterialTheme.typography.bodySmall, 
+                                color = BrightText.copy(alpha = 0.8f))
+                            Text("2. Background power: Settings → Battery → Background power consumption → Don't restrict", 
+                                style = MaterialTheme.typography.bodySmall, 
+                                color = BrightText.copy(alpha = 0.8f))
+                            Text("3. Battery optimization: Settings → Battery → Battery Optimization → Don't Optimize", 
+                                style = MaterialTheme.typography.bodySmall, 
+                                color = BrightText.copy(alpha = 0.8f))
+                            Text("4. Special access: Settings → Apps → Special app access → Autostart → Enable", 
+                                style = MaterialTheme.typography.bodySmall, 
+                                color = BrightText.copy(alpha = 0.8f))
+                            Text("5. Full-screen intents: Settings → Apps → Special app access → Full screen intents → Enable", 
+                                style = MaterialTheme.typography.bodySmall, 
+                                color = BrightText.copy(alpha = 0.8f))
                             
                             HorizontalDivider(color = DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
                             

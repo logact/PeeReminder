@@ -26,7 +26,20 @@ class ReminderActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        android.util.Log.d("ReminderActivity", "onCreate called")
+        android.util.Log.d("ReminderActivity", "=== REMINDER ACTIVITY CREATED ===")
+        android.util.Log.d("ReminderActivity", "onCreate called at: ${System.currentTimeMillis()}")
+        android.util.Log.d("ReminderActivity", "Intent extras: ${intent.extras?.keySet()}")
+        android.util.Log.d("ReminderActivity", "Intent flags: ${intent.flags}")
+        android.util.Log.d("ReminderActivity", "From alarm: ${intent.getBooleanExtra("from_alarm", false)}")
+        
+        // Log how we were launched
+        val action = intent.action
+        android.util.Log.d("ReminderActivity", "Intent action: $action")
+        android.util.Log.d("ReminderActivity", "Intent data: ${intent.data}")
+        
+        // Check if launched from notification (will have different intent structure)
+        val launchedFromNotification = action != null || intent.data != null
+        android.util.Log.d("ReminderActivity", "Likely launched from notification: $launchedFromNotification")
         
         // Configure to show over lock screen and wake device
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {

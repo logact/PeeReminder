@@ -176,8 +176,8 @@ fun SettingsScreen(
                 
                 if (isTestMode) {
                     // Test mode: intervals in seconds
-                    intervals = listOf(30, 60, 90, 120) // 30s, 60s, 90s, 120s
-                    intervalLabels = listOf("30 seconds", "60 seconds", "90 seconds", "120 seconds")
+                    intervals = listOf(10, 30, 60, 90, 120) // 10s, 30s, 60s, 90s, 120s
+                    intervalLabels = listOf("10 seconds", "30 seconds", "60 seconds", "90 seconds", "120 seconds")
                     defaultInterval = 60 // Default to 60 seconds in test mode
                 } else {
                     // Production mode: intervals in minutes
@@ -580,6 +580,43 @@ fun BatteryOptimizationInstructions() {
             style = MaterialTheme.typography.titleSmall,
             color = BrightText,
             fontWeight = FontWeight.Bold
+        )
+        
+        Text(
+            text = "• Vivo/OriginOS 4 (REQUIRES MULTIPLE SETTINGS):",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightYellow,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "  1. Settings → Apps → Pee Reminder → Autostart → Enable",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+        Text(
+            text = "  2. Settings → Battery → Background power consumption → Don't restrict",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+        Text(
+            text = "  3. Settings → Battery → Battery Optimization → Don't Optimize",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+        Text(
+            text = "  4. Settings → Apps → Special app access → Autostart → Enable",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+        Text(
+            text = "  5. Settings → Apps → Special app access → Full screen intents → Enable",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+        Text(
+            text = "  6. Settings → Notifications & Status Bar → Pee Reminder → Allow all",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
         )
         
         Text(

@@ -80,5 +80,61 @@ object PermissionHelper {
             }
         }
     }
+    
+    /**
+     * Check if full-screen intent permission is available (Android 13+)
+     * Note: On Android 13, this method may not be available, so we use try-catch
+     */
+    fun canUseFullScreenIntent(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            try {
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                notificationManager.canUseFullScreenIntent()
+            } catch (e: NoSuchMethodError) {
+                // Method not available on this Android 13 device
+                // Assume it's available (alarm apps usually get it automatically)
+                true
+            } catch (e: Exception) {
+                // Other error - assume available
+                true
+            }
+        } else {
+            true // Pre-Android 13, assume available
+        }
+    }
+    
+    /**
+     * Open the system settings page for full-screen intent permission (Android 14+)
+     * On Android 13, this might not be available, but we try anyway
+     */
+    fun openFullScreenIntentSettings(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 14+
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                // Fallback to app info page
+                val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+                context.startActivity(fallbackIntent)
+            }
+        } else {
+            // Android 13 - try to open app info where user can check special app access
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                // Last resort - open general app settings
+                val intent = Intent(Settings.ACTION_APPLICATION_SETTINGS)
+                context.startActivity(intent)
+            }
+        }
+    }
 }
 
