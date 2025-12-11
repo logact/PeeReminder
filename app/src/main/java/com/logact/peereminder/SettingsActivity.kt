@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
@@ -81,6 +83,11 @@ fun SettingsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefsManager = SharedPrefsManager.getInstance(context)
     
+    // Check if app is in debug mode
+    val isTestMode = remember {
+        (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
+    
     var intervalMinutes by remember { mutableStateOf(prefsManager.intervalMinutes) }
     var quietHoursEnabled by remember { mutableStateOf(prefsManager.quietHoursEnabled) }
     var quietHoursStart by remember { mutableStateOf(prefsManager.quietHoursStart) }
@@ -124,16 +131,68 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(paddingValues)
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // Test Mode Indicator
+            if (isTestMode) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = BrightYellow.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🧪 TEST MODE",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = BrightYellow,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "(Intervals in seconds)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = BrightText
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             // Interval Picker
             SettingsSection(title = "Reminder Interval") {
-                val intervals = listOf(60, 90, 120, 180) // 1h, 1.5h, 2h, 3h
-                val intervalLabels = listOf("1 hour", "1.5 hours", "2 hours", "3 hours")
+                // Test mode: use seconds for rapid testing
+                val intervals: List<Int>
+                val intervalLabels: List<String>
+                val defaultInterval: Int
                 
-                intervals.forEachIndexed { index, minutes ->
+                if (isTestMode) {
+                    // Test mode: intervals in seconds
+                    intervals = listOf(30, 60, 90, 120) // 30s, 60s, 90s, 120s
+                    intervalLabels = listOf("30 seconds", "60 seconds", "90 seconds", "120 seconds")
+                    defaultInterval = 60 // Default to 60 seconds in test mode
+                } else {
+                    // Production mode: intervals in minutes
+                    intervals = listOf(60, 90, 120, 180) // 1h, 1.5h, 2h, 3h
+                    intervalLabels = listOf("1 hour", "1.5 hours", "2 hours", "3 hours")
+                    defaultInterval = 120 // Default to 2 hours in production
+                }
+                
+                // Initialize with default if current value doesn't match any option
+                if (intervalMinutes !in intervals) {
+                    intervalMinutes = defaultInterval
+                    prefsManager.intervalMinutes = defaultInterval
+                }
+                
+                intervals.forEachIndexed { index, value ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -141,10 +200,10 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = intervalMinutes == minutes,
+                            selected = intervalMinutes == value,
                             onClick = {
-                                intervalMinutes = minutes
-                                prefsManager.intervalMinutes = minutes
+                                intervalMinutes = value
+                                prefsManager.intervalMinutes = value
                             },
                             colors = RadioButtonDefaults.colors(
                                 selectedColor = BrightGreen
@@ -301,6 +360,79 @@ fun SettingsScreen(
                 }
             }
             
+            // Battery Optimization Section
+            HorizontalDivider(color = DarkGray, thickness = 2.dp)
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (!PermissionHelper.isBatteryOptimizationDisabled(context)) 
+                        BrightYellow.copy(alpha = 0.2f) else BrightGreen.copy(alpha = 0.1f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Battery Optimization",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (!PermissionHelper.isBatteryOptimizationDisabled(context)) 
+                                    BrightYellow else BrightGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (!PermissionHelper.isBatteryOptimizationDisabled(context)) 
+                                    "⚠️ Enabled - Alarms may not work in background" 
+                                else "✅ Disabled - Alarms will work reliably",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = BrightText
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    if (!PermissionHelper.isBatteryOptimizationDisabled(context)) {
+                        Button(
+                            onClick = {
+                                PermissionHelper.openBatteryOptimizationSettings(context)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BrightYellow
+                            )
+                        ) {
+                            Text(
+                                text = "Disable Battery Optimization",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = BrightText,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        var showInstructions by remember { mutableStateOf(false) }
+                        TextButton(
+                            onClick = { showInstructions = !showInstructions },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (showInstructions) "Hide Instructions" else "Show Step-by-Step Instructions",
+                                color = BrightText
+                            )
+                        }
+                        if (showInstructions) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            BatteryOptimizationInstructions()
+                        }
+                    }
+                }
+            }
+            
             // Permission check section
             if (!PermissionHelper.hasExactAlarmPermission(context)) {
                 HorizontalDivider(color = DarkGray, thickness = 2.dp)
@@ -395,6 +527,112 @@ fun TimePicker(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun BatteryOptimizationInstructions() {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Step-by-Step Instructions:",
+            style = MaterialTheme.typography.titleSmall,
+            color = BrightYellow,
+            fontWeight = FontWeight.Bold
+        )
+        
+        InstructionStep(
+            number = 1,
+            text = "Tap the 'Disable Battery Optimization' button above"
+        )
+        
+        InstructionStep(
+            number = 2,
+            text = "You'll see a popup asking to 'Allow' or 'Don't allow'"
+        )
+        
+        InstructionStep(
+            number = 3,
+            text = "Tap 'Allow' to disable battery optimization for this app"
+        )
+        
+        InstructionStep(
+            number = 4,
+            text = "If you don't see a popup, you'll be taken to Settings"
+        )
+        
+        InstructionStep(
+            number = 5,
+            text = "In Settings, find 'Pee Reminder' in the list and select it"
+        )
+        
+        InstructionStep(
+            number = 6,
+            text = "Change from 'Optimize' to 'Don't optimize' or 'Not optimized'"
+        )
+        
+        HorizontalDivider(color = DarkGray, thickness = 1.dp)
+        
+        Text(
+            text = "For Specific Phone Brands:",
+            style = MaterialTheme.typography.titleSmall,
+            color = BrightText,
+            fontWeight = FontWeight.Bold
+        )
+        
+        Text(
+            text = "• Samsung: Settings → Apps → Pee Reminder → Battery → Unrestricted",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+        
+        Text(
+            text = "• Xiaomi/MIUI: Settings → Apps → Manage apps → Pee Reminder → Battery saver → No restrictions",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+        
+        Text(
+            text = "• Huawei/EMUI: Settings → Apps → Apps → Pee Reminder → Battery → Launch → Manage manually → All enabled",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+        
+        Text(
+            text = "• OnePlus/OxygenOS: Settings → Apps → Pee Reminder → Battery → Don't optimize",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+        
+        Text(
+            text = "• Stock Android: Settings → Apps → Pee Reminder → Battery → Unrestricted",
+            style = MaterialTheme.typography.bodySmall,
+            color = BrightText.copy(alpha = 0.8f)
+        )
+    }
+}
+
+@Composable
+fun InstructionStep(number: Int, text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = "$number.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = BrightYellow,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = BrightText,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 

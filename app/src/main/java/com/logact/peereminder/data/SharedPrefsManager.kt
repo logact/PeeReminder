@@ -23,7 +23,8 @@ class SharedPrefsManager private constructor(context: Context) {
         private const val KEY_QUIET_HOURS_ENABLED = "quiet_hours_enabled"
         
         // Default values
-        private const val DEFAULT_INTERVAL_MINUTES = 120 // 2 hours
+        // Note: In test mode (DEBUG), this stores seconds; in production, it stores minutes
+        private const val DEFAULT_INTERVAL_MINUTES = 120 // 2 hours (production) or 120 seconds (test mode default, but will be overridden to 60)
         private const val DEFAULT_QUIET_HOURS_START = 22 // 10 PM
         private const val DEFAULT_QUIET_HOURS_END = 7 // 7 AM
         private const val DEFAULT_ALERT_TYPE = "BOTH" // Sound + Vibration

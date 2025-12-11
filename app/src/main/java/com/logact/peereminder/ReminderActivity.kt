@@ -1,5 +1,6 @@
 package com.logact.peereminder
 
+import android.content.Context
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
@@ -25,21 +26,34 @@ class ReminderActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        android.util.Log.d("ReminderActivity", "onCreate called")
+        
         // Configure to show over lock screen and wake device
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
         
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Window flags to wake device and show over lock screen
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+        )
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            // These flags are handled by setShowWhenLocked and setTurnScreenOn
-            // but we keep FLAG_KEEP_SCREEN_ON for older versions
+        // For Android 10+, unlock the device
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
         }
         
         prefsManager = SharedPrefsManager.getInstance(this)
         alarmScheduler = AlarmScheduler(this)
+        
+        // Dismiss the notification since we're showing the activity
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        notificationManager.cancel(1001)
         
         // Handle back button press
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
