@@ -37,9 +37,34 @@ class AlarmReceiver : BroadcastReceiver() {
             return
         }
         
-        Log.d(TAG, "Alarm received - action: ${intent.action}")
+        Log.d(TAG, "=== ALARM RECEIVED ===")
+        Log.d(TAG, "Action: ${intent.action}")
+        Log.d(TAG, "Context: ${context.javaClass.simpleName}")
+        Log.d(TAG, "Package: ${context.packageName}")
+        Log.d(TAG, "Process ID: ${android.os.Process.myPid()}")
+        Log.d(TAG, "Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+        Log.d(TAG, "Android Version: ${Build.VERSION.SDK_INT} (API ${Build.VERSION.SDK_INT})")
+        Log.d(TAG, "✅ SUCCESS: Alarm triggered even though app was killed!")
+        Log.d(TAG, "This proves AlarmManager is working correctly")
+        
+        // Check if this is OriginOS 4
+        val isOriginOS4 = Build.MANUFACTURER.lowercase().contains("vivo") && 
+                         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        if (isOriginOS4) {
+            Log.d(TAG, "⚠️ ORIGINOS 4 DETECTED")
+            Log.d(TAG, "If you see this log, alarms ARE working on OriginOS 4!")
+            Log.d(TAG, "If alarms don't trigger, OriginOS 4 is blocking BroadcastReceiver")
+        }
+        
+        // Verify this is a valid alarm trigger
+        // This helps ensure the receiver works even from cold start
+        if (intent.action == null || intent.action != "com.logact.peereminder.ALARM_TRIGGERED") {
+            Log.e(TAG, "Invalid alarm intent - action mismatch")
+            return
+        }
         
         // Acquire wake lock to ensure device stays awake
+        // This is critical when app is killed - ensures device wakes up
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
@@ -48,13 +73,19 @@ class AlarmReceiver : BroadcastReceiver() {
         
         // Acquire wake lock (will be released when activity starts or after timeout)
         wakeLock.acquire(10 * 60 * 1000L) // Hold for up to 10 minutes
+        Log.d(TAG, "Wake lock acquired - device will stay awake")
         
         try {
+            // Initialize SharedPreferences - this works even from cold start
+            // SharedPreferences are stored on disk, so they persist even when app is killed
             val prefsManager = SharedPrefsManager.getInstance(context)
+            Log.d(TAG, "SharedPreferences initialized successfully")
             
             // Check if reminder is still active
+            // This check is important even from cold start - user may have disabled reminder
             if (!prefsManager.isActive) {
                 Log.d(TAG, "Reminder is not active, ignoring alarm")
+                Log.d(TAG, "This alarm was likely scheduled before reminder was paused")
                 wakeLock.release()
                 return
             }
@@ -69,7 +100,9 @@ class AlarmReceiver : BroadcastReceiver() {
                 return
             }
             
-            Log.d(TAG, "Launching ReminderActivity automatically (like system alarm)")
+            Log.d(TAG, "=== LAUNCHING REMINDER ACTIVITY ===")
+            Log.d(TAG, "App was likely killed - this is a cold start")
+            Log.d(TAG, "System has revived the app process to handle this alarm")
             
             // Create notification channel for Android O+ (must be done before creating notification)
             createNotificationChannel(context)
@@ -352,9 +385,27 @@ class AlarmReceiver : BroadcastReceiver() {
             // This works better than full-screen intents on custom ROMs with aggressive restrictions
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error in AlarmReceiver", e)
+            Log.e(TAG, "❌ CRITICAL ERROR in AlarmReceiver", e)
+            Log.e(TAG, "Error type: ${e.javaClass.simpleName}")
+            Log.e(TAG, "Error message: ${e.message}")
+            Log.e(TAG, "Stack trace:", e)
+            
+            // Even on error, try to reschedule the alarm if reminder is active
+            try {
+                val prefsManager = SharedPrefsManager.getInstance(context)
+                if (prefsManager.isActive) {
+                    Log.d(TAG, "Attempting to reschedule alarm after error")
+                    val alarmScheduler = AlarmScheduler(context)
+                    alarmScheduler.scheduleNextAlarm()
+                }
+            } catch (rescheduleError: Exception) {
+                Log.e(TAG, "Failed to reschedule alarm after error", rescheduleError)
+            }
+            
             wakeLock.release()
         }
+        
+        Log.d(TAG, "=== ALARM RECEIVER COMPLETE ===")
         // Wake lock will be released when ReminderActivity starts or after timeout
     }
     

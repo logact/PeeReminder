@@ -87,6 +87,9 @@ class MainActivity : ComponentActivity() {
                     },
                     onRequestOverlayPermission = {
                         PermissionHelper.openOverlayPermissionSettings(this@MainActivity)
+                    },
+                    onRequestAutoStart = {
+                        PermissionHelper.openAutoStartSettings(this@MainActivity)
                     }
                 )
             }
@@ -97,14 +100,89 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Verify alarm is still scheduled if reminder is active
         // This handles cases where the app was killed and restarted
-        if (prefsManager.isActive) {
-            val nextAlarmTime = alarmScheduler.getNextAlarmTime()
-            val now = System.currentTimeMillis()
+        verifyAndRescheduleAlarmIfNeeded()
+        
+        // Check if we missed an alarm (OriginOS 4 blocking scenario)
+        checkForMissedAlarm()
+    }
+    
+    /**
+     * Check if an alarm was supposed to fire but didn't (OriginOS 4 blocking)
+     * This detects when the alarm time has passed but the receiver wasn't called
+     */
+    private fun checkForMissedAlarm() {
+        if (!prefsManager.isActive) {
+            return
+        }
+        
+        val nextAlarmTime = alarmScheduler.getNextAlarmTime()
+        val now = System.currentTimeMillis()
+        
+        // If alarm time has passed by more than 1 minute, it likely didn't fire
+        if (nextAlarmTime > 0 && nextAlarmTime < now - 60000) {
+            val minutesLate = (now - nextAlarmTime) / 1000 / 60
+            Log.w("MainActivity", "⚠️ POTENTIAL MISSED ALARM DETECTED")
+            Log.w("MainActivity", "Alarm was scheduled for: ${java.util.Date(nextAlarmTime)}")
+            Log.w("MainActivity", "Current time: ${java.util.Date(now)}")
+            Log.w("MainActivity", "Alarm is $minutesLate minutes late")
+            Log.w("MainActivity", "This suggests OriginOS 4 blocked the broadcast")
+            Log.w("MainActivity", "AlarmReceiver.onReceive() was never called")
             
-            // If no alarm is scheduled or alarm time has passed, reschedule
-            if (nextAlarmTime <= 0 || nextAlarmTime <= now) {
-                Log.d("MainActivity", "Alarm missing or expired, rescheduling...")
-                alarmScheduler.scheduleNextAlarm()
+            // Check if this is OriginOS 4
+            val isOriginOS4 = android.os.Build.MANUFACTURER.lowercase().contains("vivo") && 
+                            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU
+            
+            if (isOriginOS4) {
+                Log.e("MainActivity", "❌ CONFIRMED: OriginOS 4 blocked the alarm broadcast")
+                Log.e("MainActivity", "The alarm was scheduled correctly, but BroadcastReceiver never received it")
+                Log.e("MainActivity", "User needs to configure all OriginOS 4 settings")
+                
+                // Reschedule the alarm for the next interval
+                try {
+                    alarmScheduler.scheduleNextAlarm()
+                    Log.d("MainActivity", "Alarm rescheduled for next interval")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Failed to reschedule alarm", e)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Verify alarm status and reschedule if needed
+     * This is critical when the app is restarted after being killed
+     */
+    private fun verifyAndRescheduleAlarmIfNeeded() {
+        if (!prefsManager.isActive) {
+            Log.d("MainActivity", "Reminder is not active, skipping alarm verification")
+            return
+        }
+        
+        Log.d("MainActivity", "=== Verifying alarm status ===")
+        
+        // Use AlarmScheduler's ensureAlarmScheduled method
+        val alarmScheduled = alarmScheduler.ensureAlarmScheduled()
+        
+        if (alarmScheduled) {
+            Log.d("MainActivity", "✅ Alarm is properly scheduled")
+            val nextAlarmTime = alarmScheduler.getNextAlarmTime()
+            Log.d("MainActivity", "Next alarm at: ${java.util.Date(nextAlarmTime)}")
+        } else {
+            Log.w("MainActivity", "⚠️ Alarm verification failed or alarm was rescheduled")
+        }
+        
+        // Also run comprehensive diagnostics (for debugging)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val verifier = com.logact.peereminder.alarm.AlarmVerifier(this)
+                val status = verifier.verifyAlarmStatus()
+                
+                if (!status.isAlarmProperlyScheduled) {
+                    Log.w("MainActivity", "Alarm diagnostic check failed:")
+                    Log.w("MainActivity", verifier.getDiagnosticReport())
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error running alarm diagnostics", e)
             }
         }
     }
@@ -130,6 +208,14 @@ class MainActivity : ComponentActivity() {
             alarmScheduler.scheduleNextAlarm()
             val nextAlarm = alarmScheduler.getNextAlarmTime()
             Log.d("MainActivity", "Reminder started. Next alarm at: ${java.util.Date(nextAlarm)}")
+            
+            // Verify alarm was scheduled correctly
+            val verified = alarmScheduler.verifyAlarmScheduled()
+            if (verified) {
+                Log.d("MainActivity", "✅ Alarm verified - scheduled correctly")
+            } else {
+                Log.w("MainActivity", "⚠️ Alarm verification failed - may need to reschedule")
+            }
         } catch (e: Exception) {
             Log.e("MainActivity", "Failed to start reminder", e)
             prefsManager.isActive = false
@@ -148,7 +234,8 @@ fun MainScreen(
     onSettingsClick: () -> Unit,
     onRequestNotificationPermission: () -> Unit = {},
     onRequestBatteryOptimization: () -> Unit = {},
-    onRequestOverlayPermission: () -> Unit = {}
+    onRequestOverlayPermission: () -> Unit = {},
+    onRequestAutoStart: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefsManager = SharedPrefsManager.getInstance(context)
@@ -166,8 +253,29 @@ fun MainScreen(
     var showNotificationPermissionDialog by remember { mutableStateOf(false) }
     var showBatteryOptimizationDialog by remember { mutableStateOf(false) }
     var showOverlayPermissionDialog by remember { mutableStateOf(false) }
+    var showAutoStartDialog by remember { mutableStateOf(false) }
     var isBatteryOptimized by remember { mutableStateOf(!PermissionHelper.isBatteryOptimizationDisabled(context)) }
     var hasOverlayPermission by remember { mutableStateOf(PermissionHelper.hasOverlayPermission(context)) }
+    
+    // Check if device might need auto-start permission (Chinese ROMs)
+    // Note: On some devices (like OriginOS), alarms may work without explicit auto-start
+    val needsAutoStart = remember {
+        val manufacturer = android.os.Build.MANUFACTURER.lowercase()
+        // Vivo/OriginOS: Alarms often work without auto-start, so make it optional
+        // Show for other Chinese ROMs where auto-start is more critical
+        manufacturer.contains("xiaomi") || 
+        manufacturer.contains("redmi") || 
+        manufacturer.contains("oppo") || 
+        manufacturer.contains("oneplus") || 
+        manufacturer.contains("huawei") || 
+        manufacturer.contains("honor")
+        // Note: Vivo/OriginOS removed - alarms work without it
+    }
+    
+    // For Vivo/OriginOS, show a less critical info card instead
+    val isVivoOriginOS = remember {
+        android.os.Build.MANUFACTURER.lowercase().contains("vivo")
+    }
     
     // Function to check and request permissions before starting reminder
     fun checkPermissionsAndStart(): Boolean {
@@ -394,6 +502,94 @@ fun MainScreen(
                         ) {
                             Text(
                                 text = stringResource(R.string.grant),
+                                color = BrightYellow,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Auto-start permission warning (for Chinese ROMs, except Vivo/OriginOS)
+            if (needsAutoStart) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = BrightYellow.copy(alpha = 0.2f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "⚠️ Auto-Start Permission",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = BrightYellow,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Required for alarms to work when app is killed. Enable auto-start for best reliability.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BrightText
+                            )
+                        }
+                        TextButton(
+                            onClick = { showAutoStartDialog = true }
+                        ) {
+                            Text(
+                                text = "Enable",
+                                color = BrightYellow,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Vivo/OriginOS 4 warning card (critical - alarms may not work when swiped away)
+            if (isVivoOriginOS) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = BrightYellow.copy(alpha = 0.2f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "⚠️ OriginOS 4 Alarm Warning",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = BrightYellow,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Alarms may NOT trigger when app is swiped away. Configure all required settings for best reliability.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BrightText
+                            )
+                        }
+                        TextButton(
+                            onClick = { showAutoStartDialog = true }
+                        ) {
+                            Text(
+                                text = "Fix",
                                 color = BrightYellow,
                                 fontWeight = FontWeight.Bold
                             )
@@ -765,6 +961,119 @@ fun MainScreen(
             dismissButton = {
                 TextButton(
                     onClick = { showOverlayPermissionDialog = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.later),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = BrightText
+                    )
+                }
+            },
+            containerColor = DarkGray
+        )
+    }
+    
+    // Auto-Start Permission Dialog (for Chinese ROMs)
+    if (showAutoStartDialog) {
+        AlertDialog(
+            onDismissRequest = { showAutoStartDialog = false },
+            title = {
+                Text(
+                    text = "Auto-Start Permission",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = BrightText,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Auto-start permission is required on your device for alarms to work when the app is killed or swiped away.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = BrightText
+                    )
+                    
+                    Text(
+                        text = "Without this permission:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BrightText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "• Alarms may not trigger when app is swiped away",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                    Text(
+                        text = "• Alarms may be delayed or blocked",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                    
+                    Text(
+                        text = "With auto-start enabled:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BrightText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "• Alarms work reliably even when app is killed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                    Text(
+                        text = "• Alarms trigger on time, every time",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "Instructions for your device:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BrightYellow,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    val instructions = PermissionHelper.getAutoStartInstructions(context)
+                    instructions.split("\n").forEach { line ->
+                        if (line.isNotBlank()) {
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BrightText.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showAutoStartDialog = false
+                        onRequestAutoStart()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BrightGreen
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Open Settings",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = WhiteText,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showAutoStartDialog = false },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(

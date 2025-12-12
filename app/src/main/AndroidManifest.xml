@@ -56,8 +56,9 @@
         <receiver
             android:name=".alarm.AlarmReceiver"
             android:enabled="true"
-            android:exported="false">
-            <intent-filter>
+            android:exported="false"
+            android:directBootAware="true">
+            <intent-filter android:priority="1000">
                 <action android:name="com.logact.peereminder.ALARM_TRIGGERED" />
             </intent-filter>
         </receiver>

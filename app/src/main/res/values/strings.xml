@@ -56,6 +56,7 @@
     <string name="fix">Fix</string>
     <string name="grant">Grant</string>
     <string name="back_arrow">←</string>
+    <string name="interval_5_seconds">5 seconds</string>
     <string name="interval_10_seconds">10 seconds</string>
     <string name="interval_30_seconds">30 seconds</string>
     <string name="interval_60_seconds">60 seconds</string>

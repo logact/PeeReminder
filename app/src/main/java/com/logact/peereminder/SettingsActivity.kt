@@ -188,8 +188,9 @@ fun SettingsScreen(
                 
                 if (isTestMode) {
                     // Test mode: intervals in seconds
-                    intervals = listOf(10, 30, 60, 90, 120) // 10s, 30s, 60s, 90s, 120s
+                    intervals = listOf(5, 10, 30, 60, 90, 120) // 5s, 10s, 30s, 60s, 90s, 120s
                     intervalLabels = listOf(
+                        stringResource(R.string.interval_5_seconds),
                         stringResource(R.string.interval_10_seconds),
                         stringResource(R.string.interval_30_seconds),
                         stringResource(R.string.interval_60_seconds),
