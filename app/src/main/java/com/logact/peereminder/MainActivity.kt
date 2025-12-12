@@ -80,6 +80,9 @@ class MainActivity : ComponentActivity() {
                     },
                     onRequestBatteryOptimization = {
                         PermissionHelper.openBatteryOptimizationSettings(this@MainActivity)
+                    },
+                    onRequestOverlayPermission = {
+                        PermissionHelper.openOverlayPermissionSettings(this@MainActivity)
                     }
                 )
             }
@@ -140,7 +143,8 @@ fun MainScreen(
     onStartPauseClick: (Boolean) -> Unit,
     onSettingsClick: () -> Unit,
     onRequestNotificationPermission: () -> Unit = {},
-    onRequestBatteryOptimization: () -> Unit = {}
+    onRequestBatteryOptimization: () -> Unit = {},
+    onRequestOverlayPermission: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefsManager = SharedPrefsManager.getInstance(context)
@@ -157,7 +161,9 @@ fun MainScreen(
     var showExactAlarmDialog by remember { mutableStateOf(false) }
     var showNotificationPermissionDialog by remember { mutableStateOf(false) }
     var showBatteryOptimizationDialog by remember { mutableStateOf(false) }
+    var showOverlayPermissionDialog by remember { mutableStateOf(false) }
     var isBatteryOptimized by remember { mutableStateOf(!PermissionHelper.isBatteryOptimizationDisabled(context)) }
+    var hasOverlayPermission by remember { mutableStateOf(PermissionHelper.hasOverlayPermission(context)) }
     
     // Function to check and request permissions before starting reminder
     fun checkPermissionsAndStart(): Boolean {
@@ -169,6 +175,13 @@ fun MainScreen(
             !PermissionHelper.hasNotificationPermission(context)) {
             showNotificationPermissionDialog = true
             return false
+        }
+        // Optional: Check overlay permission (for full-screen when unlocked)
+        // Don't block starting, but show info dialog
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && 
+            !PermissionHelper.hasOverlayPermission(context)) {
+            // Show info dialog but allow starting anyway
+            showOverlayPermissionDialog = true
         }
         return true
     }
@@ -182,6 +195,8 @@ fun MainScreen(
             nextAlarmTime = formatNextAlarmTime(prefsManager, alarmScheduler)
             // Check battery optimization status periodically
             isBatteryOptimized = !PermissionHelper.isBatteryOptimizationDisabled(context)
+            // Check overlay permission status periodically
+            hasOverlayPermission = PermissionHelper.hasOverlayPermission(context)
         }
     }
     
@@ -331,6 +346,50 @@ fun MainScreen(
                         ) {
                             Text(
                                 text = "Fix",
+                                color = BrightYellow,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Overlay permission warning (if not granted) - Android 6.0+
+            if (!hasOverlayPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = BrightYellow.copy(alpha = 0.2f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "ℹ️ Full-Screen When Unlocked",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = BrightYellow,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Grant 'Display over other apps' permission for full-screen alarms when device is unlocked.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BrightText
+                            )
+                        }
+                        TextButton(
+                            onClick = { showOverlayPermissionDialog = true }
+                        ) {
+                            Text(
+                                text = "Grant",
                                 color = BrightYellow,
                                 fontWeight = FontWeight.Bold
                             )
@@ -589,6 +648,119 @@ fun MainScreen(
             dismissButton = {
                 TextButton(
                     onClick = { showBatteryOptimizationDialog = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Later",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = BrightText
+                    )
+                }
+            },
+            containerColor = DarkGray
+        )
+    }
+    
+    // Overlay Permission Dialog (Android 6.0+)
+    // This is optional but recommended for full-screen alarms when device is unlocked
+    if (showOverlayPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showOverlayPermissionDialog = false },
+            title = {
+                Text(
+                    text = "Display Over Other Apps",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = BrightText,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "This permission allows the app to show full-screen alarms even when your device is unlocked.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = BrightText
+                    )
+                    
+                    Text(
+                        text = "Without this permission:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BrightText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "• Full-screen alarm only works when device is LOCKED",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                    Text(
+                        text = "• When unlocked, you'll see a notification (tap to open)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                    
+                    Text(
+                        text = "With this permission:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BrightText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "• Full-screen alarm works even when device is UNLOCKED",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "To grant this permission:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BrightText,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "1. Tap 'Open Settings' below",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                    Text(
+                        text = "2. Find 'Display over other apps' or 'Appear on top'",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                    Text(
+                        text = "3. Enable the toggle for Pee Reminder",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrightText.copy(alpha = 0.8f)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showOverlayPermissionDialog = false
+                        onRequestOverlayPermission()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BrightGreen
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Open Settings",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = BrightText,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showOverlayPermissionDialog = false },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(

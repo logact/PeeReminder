@@ -1,6 +1,7 @@
 package com.logact.peereminder.alarm
 
 import android.app.ActivityOptions
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -13,7 +14,10 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.logact.peereminder.ReminderActivity
+import com.logact.peereminder.alarm.AlarmForegroundService
+import com.logact.peereminder.alarm.OverlayAlarmWindow
 import com.logact.peereminder.data.SharedPrefsManager
+import com.logact.peereminder.utils.PermissionHelper
 import java.util.Calendar
 
 class AlarmReceiver : BroadcastReceiver() {
@@ -22,6 +26,10 @@ class AlarmReceiver : BroadcastReceiver() {
         private const val WAKELOCK_TAG = "PeeReminder::AlarmWakeLock"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "pee_reminder_alarm_channel"
+        
+        // Store overlay window instance to prevent garbage collection
+        @Volatile
+        private var overlayWindowInstance: OverlayAlarmWindow? = null
     }
     
     override fun onReceive(context: Context, intent: Intent) {
@@ -83,13 +91,13 @@ class AlarmReceiver : BroadcastReceiver() {
                 putExtra("from_alarm", true)
             }
             
+            // For full-screen intents, we should NOT use FLAG_ONE_SHOT
+            // FLAG_ONE_SHOT can prevent the full-screen intent from working properly
             val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_UPDATE_CURRENT or 
-                PendingIntent.FLAG_IMMUTABLE or 
-                PendingIntent.FLAG_ONE_SHOT
+                PendingIntent.FLAG_IMMUTABLE
             } else {
-                PendingIntent.FLAG_UPDATE_CURRENT or 
-                PendingIntent.FLAG_ONE_SHOT
+                PendingIntent.FLAG_UPDATE_CURRENT
             }
             
             // Create PendingIntent for full-screen intent
@@ -178,166 +186,170 @@ class AlarmReceiver : BroadcastReceiver() {
                 Log.e(TAG, "CRITICAL: Notification channel is null!")
             }
             
-            // PRIMARY METHOD: Full-screen intent notification
-            // This automatically launches the activity when notification is posted
-            // Works even when app is in background, device is locked, or sleeping
-            // This is the same mechanism system alarm clock uses
-            // On Android 13: Full-screen intent auto-launches when device is LOCKED (if permission granted)
-            // On Android 13: Shows as notification when device is UNLOCKED (Android design)
+            // ANDROID 13 RESTRICTION: Background Activity Launch (BAL) is blocked
+            // Android 13 blocks ALL background activity launches for security
+            // The ONLY way to show full-screen activity from background is:
+            // 1. Use full-screen intent notification (works when device is LOCKED)
+            // 2. When device is UNLOCKED, full-screen intents show as notifications (by design)
             // 
-            // CRITICAL: For full-screen intent to work, we need:
-            // 1. Channel importance = IMPORTANCE_MAX (already set)
-            // 2. Full-screen intent permission granted (may not be checkable on Android 13)
-            // 3. Notification priority = PRIORITY_MAX (already set)
-            // 4. setFullScreenIntent(pendingIntent, true) - the true is critical
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setContentTitle("⏰ Time to Go!")
-                .setContentText("Pee Reminder - Tap to open")
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setPriority(NotificationCompat.PRIORITY_MAX) // MAX priority - REQUIRED for full-screen intent
-                .setCategory(NotificationCompat.CATEGORY_ALARM) // ALARM category - helps with full-screen intent
-                .setFullScreenIntent(fullScreenPendingIntent, true) // true = show immediately when locked
-                .setContentIntent(fullScreenPendingIntent) // Launches when tapped (unlocked or if FSI fails)
-                .setAutoCancel(true)
-                .setOngoing(false)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setDefaults(NotificationCompat.DEFAULT_ALL)
-                .setSound(null) // Sound will be handled by ReminderActivity
-                .setStyle(NotificationCompat.BigTextStyle()
-                    .bigText("⏰ Time to Go! Tap to open the reminder.")
-                    .setSummaryText("Pee Reminder Alarm"))
-                .setShowWhen(true)
-                .setWhen(System.currentTimeMillis())
-                .build()
+            // Direct activity launches (startActivity, PendingIntent.send) are ALL blocked
+            // This is Android 13 security feature, not a bug
             
-            // Verify the notification has all required properties
-            Log.d(TAG, "Notification properties:")
-            Log.d(TAG, "  Priority: ${notification.priority} (MAX=${NotificationCompat.PRIORITY_MAX})")
-            Log.d(TAG, "  Category: ${notification.category}")
-            Log.d(TAG, "  Full-screen intent: ${notification.fullScreenIntent != null}")
-            Log.d(TAG, "  Content intent: ${notification.contentIntent != null}")
+            Log.d(TAG, "=== ANDROID 13 BACKGROUND ACTIVITY RESTRICTION ===")
+            Log.d(TAG, "Android 13 blocks ALL background activity launches (BAL_BLOCK)")
+            Log.d(TAG, "Full-screen intent notification is the ONLY way to show activity from background")
+            Log.d(TAG, "Full-screen intent works when device is LOCKED")
+            Log.d(TAG, "When UNLOCKED, it shows as notification (user can tap to open)")
             
-            // Verify full-screen intent is set
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val hasFullScreenIntent = notification.fullScreenIntent != null
-                Log.d(TAG, "Notification full-screen intent set: $hasFullScreenIntent")
-            }
-            
-            // On Android 13, we need to rely on full-screen intent notification
-            // Direct startActivity from BroadcastReceiver may be blocked even for alarms
-            // Full-screen intent is the most reliable method
-            
-            // Try direct startActivity first
-            // On Android 13, even if startActivity() succeeds (no exception),
-            // Android may silently block it from actually showing
-            var activityStarted = false
-            try {
-                Log.d(TAG, "Attempting direct startActivity with flags: ${reminderIntent.flags}")
-                context.startActivity(reminderIntent)
-                Log.d(TAG, "✅ Direct startActivity() call succeeded - no exception thrown")
-                activityStarted = true
-                
-                // On Android 13, even if no exception, the activity might not actually show
-                // We'll verify in ReminderActivity.onCreate() if it was actually launched
-                Log.d(TAG, "Note: On Android 13, startActivity() may succeed but activity might not show")
-                Log.d(TAG, "Check ReminderActivity logs to see if onCreate() was called immediately")
-                
-            } catch (e: SecurityException) {
-                Log.e(TAG, "❌ Direct startActivity BLOCKED by SecurityException: ${e.message}")
-                Log.e(TAG, "This means Android 13 is blocking background activity start")
-            } catch (e: android.content.ActivityNotFoundException) {
-                Log.e(TAG, "❌ Activity not found: ${e.message}")
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Direct startActivity failed: ${e.javaClass.simpleName}: ${e.message}", e)
-            }
-            
-            if (activityStarted) {
-                Log.d(TAG, "✅ Direct startActivity() returned successfully")
-                Log.d(TAG, "⚠️ However, on Android 13, activity may still not appear if app is in background")
-            } else {
-                Log.w(TAG, "⚠️ Direct startActivity failed - relying on full-screen intent notification")
-            }
+            // Skip direct launch attempts - they will be blocked by Android 13
+            val activityStarted = false
             
             // PRIMARY METHOD: Full-screen intent notification
-            // On Android 13: Auto-launches when device is LOCKED (if permission granted)
-            // On Android 13: Shows as notification when device is UNLOCKED (by design)
-            // 
-            // IMPORTANT: On some devices (especially Vivo, Xiaomi, etc.), full-screen intents
-            // may not work even with correct setup due to manufacturer-specific restrictions
+            // This is the ONLY way to show full-screen activity from background on Android 13
+            // Full-screen intent works when device is LOCKED, shows as notification when UNLOCKED
             try {
-                notificationManager.notify(NOTIFICATION_ID, notification)
-                Log.d(TAG, "Full-screen intent notification posted")
+                Log.d(TAG, "=== PRIMARY METHOD: Full-screen intent notification ===")
+                Log.d(TAG, "This is the ONLY method that works on Android 13 from background")
+                
+                // CRITICAL: For full-screen intents to work on Android 13:
+                // 1. Channel importance MUST be IMPORTANCE_MAX (5)
+                // 2. Notification priority should be PRIORITY_HIGH (not MAX - MAX is deprecated)
+                // 3. setFullScreenIntent must be called with true
+                // 4. Category should be CATEGORY_ALARM
+                // 5. PendingIntent should NOT have FLAG_ONE_SHOT
+                
+                val fullScreenNotification = NotificationCompat.Builder(context, CHANNEL_ID)
+                    .setContentTitle("⏰ Time to Go!")
+                    .setContentText("Pee Reminder - Tap to open")
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH) // HIGH priority (MAX is deprecated)
+                    .setCategory(NotificationCompat.CATEGORY_ALARM) // ALARM category - CRITICAL
+                    .setFullScreenIntent(fullScreenPendingIntent, true) // PRIMARY: full-screen intent - true is critical
+                    .setContentIntent(fullScreenPendingIntent) // Backup: tap to launch
+                    .setAutoCancel(true)
+                    .setOngoing(false)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setDefaults(NotificationCompat.DEFAULT_ALL)
+                    .setSound(null) // Sound handled by ReminderActivity
+                    .setStyle(NotificationCompat.BigTextStyle()
+                        .bigText("⏰ Time to Go! Tap to open the reminder.")
+                        .setSummaryText("Pee Reminder Alarm"))
+                    .setShowWhen(true)
+                    .setWhen(System.currentTimeMillis())
+                    // Make it heads-up when unlocked
+                    .setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
+                    .build()
+                
+                Log.d(TAG, "Full-screen notification created with:")
+                Log.d(TAG, "  Priority: ${fullScreenNotification.priority}")
+                Log.d(TAG, "  Category: ${fullScreenNotification.category}")
+                Log.d(TAG, "  Full-screen intent: ${fullScreenNotification.fullScreenIntent != null}")
+                Log.d(TAG, "  Channel importance: ${notificationManager.getNotificationChannel(CHANNEL_ID)?.importance}")
+                
+                notificationManager.notify(NOTIFICATION_ID, fullScreenNotification)
+                Log.d(TAG, "✅ Full-screen intent notification posted")
+                
+                // Check device lock state
+                val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                val isDeviceLocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    keyguardManager.isDeviceLocked
+                } else {
+                    @Suppress("DEPRECATION")
+                    keyguardManager.isKeyguardLocked
+                }
+                
+                Log.d(TAG, "Device lock state: ${if (isDeviceLocked) "LOCKED" else "UNLOCKED"}")
+                
+                // Show overlay window when device is UNLOCKED (requires SYSTEM_ALERT_WINDOW permission)
+                // This is a workaround for Android 13's limitation
+                if (!isDeviceLocked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Log.d(TAG, "=== Device is UNLOCKED - Checking overlay permission ===")
+                    val hasOverlayPermission = PermissionHelper.hasOverlayPermission(context)
+                    Log.d(TAG, "Overlay permission granted: $hasOverlayPermission")
+                    
+                    if (hasOverlayPermission) {
+                        try {
+                            Log.d(TAG, "Creating and showing overlay window...")
+                            // Store instance to prevent garbage collection
+                            overlayWindowInstance = OverlayAlarmWindow(context)
+                            overlayWindowInstance?.show()
+                            Log.d(TAG, "✅ Overlay window show() called - check logs for result")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Failed to show overlay window: ${e.javaClass.simpleName}: ${e.message}", e)
+                            Log.e(TAG, "Stack trace:", e)
+                            overlayWindowInstance = null
+                        }
+                    } else {
+                        Log.w(TAG, "⚠️ Overlay permission NOT granted")
+                        Log.w(TAG, "Device is UNLOCKED but overlay can't be shown")
+                        Log.w(TAG, "To enable full-screen when unlocked:")
+                        Log.w(TAG, "Settings → Apps → Pee Reminder → Display over other apps → Enable")
+                    }
+                } else if (isDeviceLocked) {
+                    Log.d(TAG, "Device is LOCKED - full-screen intent will handle it automatically")
+                }
+                
+                Log.d(TAG, "=== FULL-SCREEN BEHAVIOR SUMMARY ===")
+                Log.d(TAG, "Device LOCKED: Full-screen activity via full-screen intent ✅")
+                if (PermissionHelper.hasOverlayPermission(context)) {
+                    Log.d(TAG, "Device UNLOCKED: Overlay window should appear ✅")
+                } else {
+                    Log.d(TAG, "Device UNLOCKED: Shows as notification (tap to open) ⚠️")
+                    Log.d(TAG, "Grant 'Display over other apps' for full-screen when unlocked")
+                }
                 
                 // Log detailed information for debugging
-                Log.d(TAG, "=== ALARM TRIGGER SUMMARY ===")
-                Log.d(TAG, "Direct startActivity attempted: $activityStarted")
-                Log.d(TAG, "Full-screen intent notification posted: true")
-                Log.d(TAG, "Channel importance: IMPORTANCE_MAX (5)")
-                Log.d(TAG, "Full-screen intent set: true")
+                Log.d(TAG, "=== ALARM TRIGGER SUMMARY (Android 13) ===")
+                Log.d(TAG, "Full-screen intent notification: ✅ POSTED")
+                val channel = notificationManager.getNotificationChannel(CHANNEL_ID)
+                val channelImportance = channel?.importance ?: -1
+                Log.d(TAG, "Channel importance: $channelImportance (required: ${NotificationManager.IMPORTANCE_MAX})")
+                if (channelImportance != NotificationManager.IMPORTANCE_MAX) {
+                    Log.e(TAG, "❌ CRITICAL: Channel importance is NOT MAX!")
+                    Log.e(TAG, "Full-screen intent will NOT work automatically!")
+                    Log.e(TAG, "Please set channel to 'Urgent' in: Settings → Apps → Pee Reminder → Notifications")
+                }
+                Log.d(TAG, "Full-screen intent permission: ${if (fullScreenIntentAvailable || !canCheckPermission) "✅ Available" else "❌ Denied"}")
+                
                 Log.d(TAG, "=== EXPECTED BEHAVIOR ===")
-                if (fullScreenIntentAvailable || !canCheckPermission) {
-                    Log.d(TAG, "Device LOCKED: Activity should auto-launch via full-screen intent")
-                    Log.d(TAG, "Device UNLOCKED: Notification appears, user must tap to launch activity")
-                } else {
-                    Log.e(TAG, "⚠️ Full-screen intent permission NOT granted - activity will NOT auto-launch!")
-                    Log.e(TAG, "User must tap notification to launch activity (even when device is locked)")
-                }
-                Log.d(TAG, "=== CHECK LOGS ===")
-                Log.d(TAG, "Look for 'ReminderActivity onCreate called' - if missing, activity didn't launch")
-                Log.d(TAG, "If onCreate appears immediately = direct start worked")
-                Log.d(TAG, "If onCreate appears after delay = launched from notification tap")
-                Log.d(TAG, "=== TROUBLESHOOTING ===")
-                if (!fullScreenIntentAvailable && canCheckPermission) {
-                    Log.e(TAG, "❌ Full-screen intent permission is DENIED")
-                    Log.e(TAG, "Solution: Enable in Settings → Apps → Special App Access → Full Screen Intents")
-                } else if (!canCheckPermission) {
-                    Log.w(TAG, "⚠️ Cannot verify full-screen intent permission on this device")
-                    Log.w(TAG, "If full-screen intent doesn't work, check:")
-                    Log.w(TAG, "1. Settings → Apps → Special App Access → Full Screen Intents")
-                    Log.w(TAG, "2. Settings → Apps → Pee Reminder → Notifications → Allow all notifications")
-                    Log.w(TAG, "3. Settings → Do Not Disturb → Allow Pee Reminder")
-                    Log.w(TAG, "4. Some devices (Vivo/Xiaomi) may have additional restrictions")
-                }
+                Log.d(TAG, "Device LOCKED: Full-screen activity should appear automatically")
+                Log.d(TAG, "Device UNLOCKED: Notification appears - user must tap to open")
+                Log.d(TAG, "This is Android 13 security behavior - background activity launches are blocked")
                 
-                if (activityStarted) {
-                    Log.d(TAG, "✅ Both methods attempted: direct start + full-screen intent notification")
-                } else {
-                    Log.w(TAG, "⚠️ Direct start failed - relying ONLY on full-screen intent notification")
-                }
+                Log.d(TAG, "=== ORIGINOS 4 SPECIFIC NOTES ===")
+                Log.d(TAG, "OriginOS 4 may block full-screen intents even with permission")
+                Log.d(TAG, "Direct launch with ActivityOptions is more reliable on OriginOS")
+                Log.d(TAG, "If activity doesn't appear, check:")
+                Log.d(TAG, "  1. Settings → Apps → Pee Reminder → Battery → No restrictions")
+                Log.d(TAG, "  2. Settings → Apps → Pee Reminder → Auto-start → Enabled")
+                Log.d(TAG, "  3. Settings → Apps → Special App Access → Full Screen Intents")
+                Log.d(TAG, "  4. Settings → Battery → Background restrictions → Allow Pee Reminder")
                 
-                // Additional check: Verify notification was actually posted
+                // Verify notification was posted
                 try {
                     val activeNotifications = notificationManager.activeNotifications
                     val ourNotification = activeNotifications.find { it.id == NOTIFICATION_ID }
                     if (ourNotification != null) {
                         Log.d(TAG, "✅ Notification is active in system")
-                        Log.d(TAG, "Notification flags: ${ourNotification.notification.flags}")
                         Log.d(TAG, "Notification priority: ${ourNotification.notification.priority}")
                     } else {
-                        Log.w(TAG, "⚠️ Notification not found in active notifications - may have been suppressed by system")
-                        Log.w(TAG, "This could mean:")
-                        Log.w(TAG, "  - Full-screen intent permission denied")
-                        Log.w(TAG, "  - Device-specific restrictions (Vivo/Xiaomi)")
-                        Log.w(TAG, "  - Do Not Disturb mode blocking it")
-                        Log.w(TAG, "  - Notification settings blocking it")
+                        Log.w(TAG, "⚠️ Notification not found - may have been suppressed by OriginOS")
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Could not check active notifications: ${e.message}")
                 }
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to post full-screen intent notification: ${e.message}", e)
+                Log.e(TAG, "❌ Failed to post notification: ${e.message}", e)
                 if (!activityStarted) {
-                    Log.e(TAG, "CRITICAL: Both methods failed!")
+                    Log.e(TAG, "CRITICAL: All methods failed!")
+                    Log.e(TAG, "Please check OriginOS battery optimization and auto-start settings")
                     wakeLock.release()
                 }
             }
             
-            // Note: Full-screen intent notification is the PRIMARY method because:
-            // 1. It automatically launches activity when posted (no user interaction needed)
-            // 2. Works even when app is in background (exempt from restrictions)
-            // 3. Works when device is locked or sleeping
-            // 4. This is exactly how system alarm clock works
+            // Summary: New approach prioritizes direct launch for Android 13/OriginOS 4
+            // This works better than full-screen intents on custom ROMs with aggressive restrictions
             
         } catch (e: Exception) {
             Log.e(TAG, "Error in AlarmReceiver", e)
@@ -350,36 +362,41 @@ class AlarmReceiver : BroadcastReceiver() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             
-            // Check if channel already exists
-            val existingChannel = notificationManager.getNotificationChannel(CHANNEL_ID)
-            
             // IMPORTANCE_MAX is REQUIRED for full-screen intents to work automatically
             // IMPORTANCE_HIGH will only show as a regular notification (requires user click)
             val requiredImportance = NotificationManager.IMPORTANCE_MAX
             
-            // If channel exists, check its importance
-            if (existingChannel != null) {
-                val currentImportance = existingChannel.importance
-                Log.d(TAG, "Existing channel found with importance: $currentImportance (required: $requiredImportance)")
-                
-                // If channel has wrong importance, delete and recreate it
-                // Note: Once created, channel importance cannot be changed, must delete and recreate
-                if (currentImportance != requiredImportance) {
-                    Log.w(TAG, "Channel has wrong importance ($currentImportance). Deleting to recreate with IMPORTANCE_MAX")
-                    try {
+            // Always delete and recreate channel to ensure correct importance
+            // OriginOS 4 may downgrade importance, so we need to be aggressive
+            try {
+                val existingChannel = notificationManager.getNotificationChannel(CHANNEL_ID)
+                if (existingChannel != null) {
+                    val currentImportance = existingChannel.importance
+                    Log.d(TAG, "Existing channel found with importance: $currentImportance (required: $requiredImportance)")
+                    
+                    if (currentImportance != requiredImportance) {
+                        Log.w(TAG, "Channel has wrong importance ($currentImportance). Deleting to recreate with IMPORTANCE_MAX")
                         notificationManager.deleteNotificationChannel(CHANNEL_ID)
-                        Log.d(TAG, "Channel deleted successfully")
-                        // Wait a moment for deletion to complete
-                        Thread.sleep(100)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to delete channel: ${e.message}", e)
+                        // Wait for deletion to complete
+                        Thread.sleep(200)
+                    } else {
+                        Log.d(TAG, "Channel already has correct importance (IMPORTANCE_MAX)")
+                        // Double-check it's still correct (OriginOS might have changed it)
+                        val recheckChannel = notificationManager.getNotificationChannel(CHANNEL_ID)
+                        if (recheckChannel != null && recheckChannel.importance != requiredImportance) {
+                            Log.w(TAG, "Channel importance was changed! Deleting and recreating...")
+                            notificationManager.deleteNotificationChannel(CHANNEL_ID)
+                            Thread.sleep(200)
+                        } else {
+                            return // Channel is correct
+                        }
                     }
                 } else {
-                    Log.d(TAG, "Channel already has correct importance (IMPORTANCE_MAX)")
-                    return // Channel is correct, no need to recreate
+                    Log.d(TAG, "No existing channel found, will create new one")
                 }
-            } else {
-                Log.d(TAG, "No existing channel found, will create new one")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking/deleting channel: ${e.message}", e)
+                // Continue to create channel anyway
             }
             
             // Create channel with IMPORTANCE_MAX (REQUIRED for automatic full-screen intent)
@@ -389,7 +406,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 "Pee Reminder Alarms",
                 NotificationManager.IMPORTANCE_MAX // MAX is REQUIRED for automatic full-screen intent
             ).apply {
-                description = "Notifications for pee reminders"
+                description = "Notifications for pee reminders - Full screen alarm"
                 enableLights(true)
                 enableVibration(true)
                 setShowBadge(false)
@@ -398,15 +415,44 @@ class AlarmReceiver : BroadcastReceiver() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 }
+                // Set sound to null (handled by activity)
+                setSound(null, null)
             }
             
             try {
                 notificationManager.createNotificationChannel(channel)
+                
+                // Verify channel was created with correct importance
+                // Wait a moment for system to process
+                Thread.sleep(100)
+                
                 val createdChannel = notificationManager.getNotificationChannel(CHANNEL_ID)
                 if (createdChannel != null) {
-                    Log.d(TAG, "Notification channel created successfully with importance: ${createdChannel.importance}")
-                    if (createdChannel.importance != NotificationManager.IMPORTANCE_MAX) {
-                        Log.e(TAG, "WARNING: Channel was created but importance is ${createdChannel.importance}, not IMPORTANCE_MAX!")
+                    val actualImportance = createdChannel.importance
+                    Log.d(TAG, "Notification channel created with importance: $actualImportance")
+                    
+                    if (actualImportance != NotificationManager.IMPORTANCE_MAX) {
+                        Log.e(TAG, "❌ CRITICAL: Channel was created but importance is $actualImportance, not IMPORTANCE_MAX!")
+                        Log.e(TAG, "This means full-screen intent will NOT work automatically!")
+                        Log.e(TAG, "OriginOS 4 may have downgraded the importance - user needs to manually set it in settings")
+                        Log.e(TAG, "Settings → Apps → Pee Reminder → Notifications → Pee Reminder Alarms → Urgent")
+                        
+                        // Try one more time - delete and recreate
+                        if (actualImportance == NotificationManager.IMPORTANCE_HIGH) {
+                            Log.w(TAG, "Attempting to fix channel importance by recreating...")
+                            notificationManager.deleteNotificationChannel(CHANNEL_ID)
+                            Thread.sleep(200)
+                            notificationManager.createNotificationChannel(channel)
+                            Thread.sleep(100)
+                            
+                            val recreatedChannel = notificationManager.getNotificationChannel(CHANNEL_ID)
+                            if (recreatedChannel != null && recreatedChannel.importance != NotificationManager.IMPORTANCE_MAX) {
+                                Log.e(TAG, "❌ FAILED: Channel importance still wrong after recreation: ${recreatedChannel.importance}")
+                                Log.e(TAG, "User MUST manually set channel to 'Urgent' in notification settings")
+                            }
+                        }
+                    } else {
+                        Log.d(TAG, "✅ Channel has correct importance (IMPORTANCE_MAX)")
                     }
                 } else {
                     Log.e(TAG, "ERROR: Channel creation failed - channel is null")

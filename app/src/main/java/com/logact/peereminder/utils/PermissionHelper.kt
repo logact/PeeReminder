@@ -104,6 +104,37 @@ object PermissionHelper {
     }
     
     /**
+     * Check if overlay permission (SYSTEM_ALERT_WINDOW) is granted (Android 6.0+)
+     */
+    fun hasOverlayPermission(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(context)
+        } else {
+            true // Permission not required for older versions
+        }
+    }
+    
+    /**
+     * Open the system settings page for overlay permission
+     */
+    fun openOverlayPermissionSettings(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            try {
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                // Fallback to app info page
+                val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+                context.startActivity(fallbackIntent)
+            }
+        }
+    }
+    
+    /**
      * Open the system settings page for full-screen intent permission (Android 14+)
      * On Android 13, this might not be available, but we try anyway
      */

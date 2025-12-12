@@ -433,6 +433,87 @@ fun SettingsScreen(
                 }
             }
             
+            // Overlay Permission Section (for full-screen when unlocked)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                var hasOverlayPermission by remember { mutableStateOf(PermissionHelper.hasOverlayPermission(context)) }
+                
+                LaunchedEffect(Unit) {
+                    // Check permission status periodically
+                    while (true) {
+                        kotlinx.coroutines.delay(1000)
+                        hasOverlayPermission = PermissionHelper.hasOverlayPermission(context)
+                    }
+                }
+                
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (hasOverlayPermission) 
+                            BrightGreen.copy(alpha = 0.2f) 
+                        else 
+                            BrightYellow.copy(alpha = 0.2f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Display Over Other Apps",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = if (hasOverlayPermission) BrightGreen else BrightYellow,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (hasOverlayPermission) 
+                                        "✅ Enabled - Full-screen alarms work when device is unlocked"
+                                    else 
+                                        "⚠️ Not enabled - Full-screen only works when device is locked",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = BrightText
+                                )
+                            }
+                        }
+                        
+                        if (!hasOverlayPermission) {
+                            Button(
+                                onClick = {
+                                    PermissionHelper.openOverlayPermissionSettings(context)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = BrightGreen
+                                )
+                            ) {
+                                Text(
+                                    text = "Grant Permission",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = BrightText,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            
+                            Text(
+                                text = "This allows full-screen alarms even when your device is unlocked. Without it, you'll see a notification when unlocked (tap to open).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BrightText.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+            }
+            
             // Permission check section
             if (!PermissionHelper.hasExactAlarmPermission(context)) {
                 HorizontalDivider(color = DarkGray, thickness = 2.dp)
