@@ -101,6 +101,15 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         // Update sound name when it changes
         customSoundName = getSoundName(context, prefsManager)
+        
+        // Initialize interval based on mode if it hasn't been explicitly set
+        // In test mode, default should be 10 seconds, not 120 (which is production default)
+        if (isTestMode && !prefsManager.hasIntervalBeenSet() && intervalMinutes == 120) {
+            // Value is uninitialized (using SharedPrefsManager default of 120)
+            // Initialize to test mode default of 10 seconds
+            intervalMinutes = 10
+            prefsManager.intervalMinutes = 10
+        }
     }
     
     Scaffold(
@@ -187,7 +196,7 @@ fun SettingsScreen(
                         stringResource(R.string.interval_90_seconds),
                         stringResource(R.string.interval_120_seconds)
                     )
-                    defaultInterval = 60 // Default to 60 seconds in test mode
+                    defaultInterval = 10 // Default to 10 seconds in test mode
                 } else {
                     // Production mode: intervals in minutes
                     intervals = listOf(60, 90, 120, 180) // 1h, 1.5h, 2h, 3h

@@ -24,7 +24,7 @@ class SharedPrefsManager private constructor(context: Context) {
         
         // Default values
         // Note: In test mode (DEBUG), this stores seconds; in production, it stores minutes
-        private const val DEFAULT_INTERVAL_MINUTES = 120 // 2 hours (production) or 120 seconds (test mode default, but will be overridden to 60)
+        private const val DEFAULT_INTERVAL_MINUTES = 120 // 2 hours (production) or 120 seconds (test mode default, but will be overridden to 10 in SettingsActivity)
         private const val DEFAULT_QUIET_HOURS_START = 22 // 10 PM
         private const val DEFAULT_QUIET_HOURS_END = 7 // 7 AM
         private const val DEFAULT_ALERT_TYPE = "BOTH" // Sound + Vibration
@@ -43,6 +43,11 @@ class SharedPrefsManager private constructor(context: Context) {
     var intervalMinutes: Int
         get() = prefs.getInt(KEY_INTERVAL_MINUTES, DEFAULT_INTERVAL_MINUTES)
         set(value) = prefs.edit().putInt(KEY_INTERVAL_MINUTES, value).apply()
+    
+    // Check if interval has been explicitly set (not using default)
+    fun hasIntervalBeenSet(): Boolean {
+        return prefs.contains(KEY_INTERVAL_MINUTES)
+    }
     
     // Next alarm timestamp
     var nextAlarmTimestamp: Long
