@@ -115,7 +115,7 @@ class OverlayAlarmWindow(private val context: Context) {
         val rootLayout = android.widget.LinearLayout(context).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             gravity = android.view.Gravity.CENTER
-            setBackgroundColor(android.graphics.Color.BLACK)
+            setBackgroundColor(android.graphics.Color.WHITE)
             setPadding(48, 48, 48, 48)
         }
         
@@ -131,7 +131,7 @@ class OverlayAlarmWindow(private val context: Context) {
         val messageText = TextView(context).apply {
             text = context.getString(R.string.time_to_go)
             textSize = 36f
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(android.graphics.Color.parseColor("#212121")) // Dark text for light background
             gravity = android.view.Gravity.CENTER
             setPadding(0, 24, 0, 48)
         }

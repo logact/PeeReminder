@@ -428,7 +428,7 @@ fun MainScreen(
                     text = if (isActive) stringResource(R.string.pause_reminder) else stringResource(R.string.start_reminder),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = BrightText
+                    color = WhiteText
                 )
             }
         }
@@ -465,7 +465,7 @@ fun MainScreen(
                     Text(
                         text = stringResource(R.string.open_settings),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = BrightText
+                        color = WhiteText
                     )
                 }
             },
@@ -515,7 +515,7 @@ fun MainScreen(
                     Text(
                         text = stringResource(R.string.grant_permission),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = BrightText
+                        color = WhiteText
                     )
                 }
             },
@@ -644,7 +644,7 @@ fun MainScreen(
                     Text(
                         text = stringResource(R.string.open_settings),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = BrightText,
+                        color = WhiteText,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -757,7 +757,7 @@ fun MainScreen(
                     Text(
                         text = stringResource(R.string.open_settings),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = BrightText,
+                        color = WhiteText,
                         fontWeight = FontWeight.Bold
                     )
                 }

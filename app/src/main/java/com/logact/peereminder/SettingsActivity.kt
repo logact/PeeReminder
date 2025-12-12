@@ -428,7 +428,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.disable_battery_optimization),
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = BrightText,
+                                color = WhiteText,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -517,7 +517,7 @@ fun SettingsScreen(
                                 Text(
                                     text = stringResource(R.string.grant_permission),
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = BrightText,
+                                    color = WhiteText,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -569,7 +569,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.grant_permission),
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = BrightText
+                                color = WhiteText
                             )
                         }
                     }
