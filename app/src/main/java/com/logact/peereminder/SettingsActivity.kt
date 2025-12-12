@@ -601,29 +601,60 @@ fun TimePicker(
     hour: Int,
     onHourChange: (Int) -> Unit
 ) {
+    var expanded by remember { mutableStateOf(false) }
     val hours = (0..23).toList()
     
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        hours.chunked(6).forEach { hourGroup ->
-            Column {
-                hourGroup.forEach { h ->
-                    TextButton(
-                        onClick = { onHourChange(h) },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = if (hour == h) BrightGreen else BrightText
-                        ),
-                        modifier = Modifier.width(48.dp)
-                    ) {
+    Box(modifier = Modifier.wrapContentSize()) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = BrightText
+            ),
+            modifier = Modifier.width(120.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = String.format("%02d:00", hour),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = BrightText
+                )
+                Text(
+                    text = "▼",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BrightText.copy(alpha = 0.7f)
+                )
+            }
+        }
+        
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .width(120.dp)
+                .heightIn(max = 300.dp)
+        ) {
+            hours.forEach { h ->
+                DropdownMenuItem(
+                    text = {
                         Text(
                             text = String.format("%02d:00", h),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (hour == h) BrightGreen else BrightText,
                             fontWeight = if (hour == h) FontWeight.Bold else FontWeight.Normal
                         )
-                    }
-                }
+                    },
+                    onClick = {
+                        onHourChange(h)
+                        expanded = false
+                    },
+                    colors = MenuDefaults.itemColors(
+                        textColor = if (hour == h) BrightGreen else BrightText
+                    )
+                )
             }
         }
     }
