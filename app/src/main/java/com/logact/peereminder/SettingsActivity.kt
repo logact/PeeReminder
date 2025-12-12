@@ -15,11 +15,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.logact.peereminder.data.SharedPrefsManager
 import com.logact.peereminder.ui.theme.*
 import com.logact.peereminder.utils.PermissionHelper
+import com.logact.peereminder.R
 
 class SettingsActivity : ComponentActivity() {
     private lateinit var prefsManager: SharedPrefsManager
@@ -63,7 +66,7 @@ class SettingsActivity : ComponentActivity() {
     private fun openSoundPicker() {
         val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
             putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
-            putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Select Alarm Sound")
+            putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, getString(R.string.select_alarm_sound))
             putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
             putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
             
@@ -107,7 +110,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Settings",
+                        text = stringResource(R.string.settings_title),
                         style = MaterialTheme.typography.headlineMedium,
                         color = BrightText,
                         fontWeight = FontWeight.Bold
@@ -116,7 +119,7 @@ fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Text(
-                            text = "←",
+                            text = stringResource(R.string.back_arrow),
                             style = MaterialTheme.typography.headlineMedium,
                             color = BrightText
                         )
@@ -152,14 +155,14 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "🧪 TEST MODE",
+                            text = stringResource(R.string.test_mode),
                             style = MaterialTheme.typography.titleLarge,
                             color = BrightYellow,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "(Intervals in seconds)",
+                            text = stringResource(R.string.test_mode_intervals),
                             style = MaterialTheme.typography.bodyMedium,
                             color = BrightText
                         )
@@ -168,7 +171,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
             // Interval Picker
-            SettingsSection(title = "Reminder Interval") {
+            SettingsSection(title = stringResource(R.string.interval_setting)) {
                 // Test mode: use seconds for rapid testing
                 val intervals: List<Int>
                 val intervalLabels: List<String>
@@ -177,12 +180,23 @@ fun SettingsScreen(
                 if (isTestMode) {
                     // Test mode: intervals in seconds
                     intervals = listOf(10, 30, 60, 90, 120) // 10s, 30s, 60s, 90s, 120s
-                    intervalLabels = listOf("10 seconds", "30 seconds", "60 seconds", "90 seconds", "120 seconds")
+                    intervalLabels = listOf(
+                        stringResource(R.string.interval_10_seconds),
+                        stringResource(R.string.interval_30_seconds),
+                        stringResource(R.string.interval_60_seconds),
+                        stringResource(R.string.interval_90_seconds),
+                        stringResource(R.string.interval_120_seconds)
+                    )
                     defaultInterval = 60 // Default to 60 seconds in test mode
                 } else {
                     // Production mode: intervals in minutes
                     intervals = listOf(60, 90, 120, 180) // 1h, 1.5h, 2h, 3h
-                    intervalLabels = listOf("1 hour", "1.5 hours", "2 hours", "3 hours")
+                    intervalLabels = listOf(
+                        stringResource(R.string.interval_1_hour),
+                        stringResource(R.string.interval_1_5_hours),
+                        stringResource(R.string.interval_2_hours),
+                        stringResource(R.string.interval_3_hours)
+                    )
                     defaultInterval = 120 // Default to 2 hours in production
                 }
                 
@@ -223,14 +237,14 @@ fun SettingsScreen(
             HorizontalDivider(color = DarkGray, thickness = 2.dp)
             
             // Quiet Hours
-            SettingsSection(title = "Quiet Hours") {
+            SettingsSection(title = stringResource(R.string.quiet_hours)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Disable reminders overnight",
+                        text = stringResource(R.string.quiet_hours_enabled),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText,
                         modifier = Modifier.weight(1f)
@@ -257,7 +271,7 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Start:",
+                            text = stringResource(R.string.quiet_hours_start),
                             style = MaterialTheme.typography.bodyLarge,
                             color = BrightText,
                             modifier = Modifier.width(100.dp)
@@ -279,7 +293,7 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "End:",
+                            text = stringResource(R.string.quiet_hours_end),
                             style = MaterialTheme.typography.bodyLarge,
                             color = BrightText,
                             modifier = Modifier.width(100.dp)
@@ -298,9 +312,13 @@ fun SettingsScreen(
             HorizontalDivider(color = DarkGray, thickness = 2.dp)
             
             // Alert Type
-            SettingsSection(title = "Alert Type") {
+            SettingsSection(title = stringResource(R.string.alert_type)) {
                 val alertTypes = listOf("SOUND", "VIBRATION", "BOTH")
-                val alertLabels = listOf("Sound", "Vibration", "Both")
+                val alertLabels = listOf(
+                    stringResource(R.string.alert_sound),
+                    stringResource(R.string.alert_vibration),
+                    stringResource(R.string.alert_both)
+                )
                 
                 alertTypes.forEachIndexed { index, type ->
                     Row(
@@ -333,7 +351,7 @@ fun SettingsScreen(
             HorizontalDivider(color = DarkGray, thickness = 2.dp)
             
             // Alarm Sound
-            SettingsSection(title = "Alarm Sound") {
+            SettingsSection(title = stringResource(R.string.alarm_sound)) {
                 Button(
                     onClick = onSoundPickerClick,
                     modifier = Modifier
@@ -352,7 +370,7 @@ fun SettingsScreen(
                             color = BrightText
                         )
                         Text(
-                            text = "Tap to change",
+                            text = stringResource(R.string.tap_to_change),
                             style = MaterialTheme.typography.bodySmall,
                             color = BrightText.copy(alpha = 0.7f)
                         )
@@ -380,7 +398,7 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Battery Optimization",
+                                text = stringResource(R.string.battery_optimization_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = if (!PermissionHelper.isBatteryOptimizationDisabled(context)) 
                                     BrightYellow else BrightGreen,
@@ -389,8 +407,8 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = if (!PermissionHelper.isBatteryOptimizationDisabled(context)) 
-                                    "⚠️ Enabled - Alarms may not work in background" 
-                                else "✅ Disabled - Alarms will work reliably",
+                                    stringResource(R.string.battery_optimization_enabled)
+                                else stringResource(R.string.battery_optimization_disabled),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = BrightText
                             )
@@ -408,7 +426,7 @@ fun SettingsScreen(
                             )
                         ) {
                             Text(
-                                text = "Disable Battery Optimization",
+                                text = stringResource(R.string.disable_battery_optimization),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = BrightText,
                                 fontWeight = FontWeight.Bold
@@ -421,7 +439,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = if (showInstructions) "Hide Instructions" else "Show Step-by-Step Instructions",
+                                text = if (showInstructions) stringResource(R.string.hide_instructions) else stringResource(R.string.show_instructions),
                                 color = BrightText
                             )
                         }
@@ -469,7 +487,7 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Display Over Other Apps",
+                                    text = stringResource(R.string.display_over_other_apps),
                                     style = MaterialTheme.typography.titleMedium,
                                     color = if (hasOverlayPermission) BrightGreen else BrightYellow,
                                     fontWeight = FontWeight.Bold
@@ -477,9 +495,9 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = if (hasOverlayPermission) 
-                                        "✅ Enabled - Full-screen alarms work when device is unlocked"
+                                        stringResource(R.string.display_over_other_apps_enabled)
                                     else 
-                                        "⚠️ Not enabled - Full-screen only works when device is locked",
+                                        stringResource(R.string.display_over_other_apps_disabled),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = BrightText
                                 )
@@ -497,7 +515,7 @@ fun SettingsScreen(
                                 )
                             ) {
                                 Text(
-                                    text = "Grant Permission",
+                                    text = stringResource(R.string.grant_permission),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = BrightText,
                                     fontWeight = FontWeight.Bold
@@ -505,7 +523,7 @@ fun SettingsScreen(
                             }
                             
                             Text(
-                                text = "This allows full-screen alarms even when your device is unlocked. Without it, you'll see a notification when unlocked (tap to open).",
+                                text = stringResource(R.string.display_over_other_apps_description),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = BrightText.copy(alpha = 0.8f)
                             )
@@ -528,14 +546,14 @@ fun SettingsScreen(
                         modifier = Modifier.padding(16.dp)
                     ) {
                         Text(
-                            text = "Permission Required",
+                            text = stringResource(R.string.permission_required),
                             style = MaterialTheme.typography.titleMedium,
                             color = BrightRed,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "This app needs permission to schedule exact alarms.",
+                            text = stringResource(R.string.exact_alarm_permission_message),
                             style = MaterialTheme.typography.bodyMedium,
                             color = BrightText
                         )
@@ -549,7 +567,7 @@ fun SettingsScreen(
                             )
                         ) {
                             Text(
-                                text = "Grant Permission",
+                                text = stringResource(R.string.grant_permission),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = BrightText
                             )
@@ -618,7 +636,7 @@ fun BatteryOptimizationInstructions() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "Step-by-Step Instructions:",
+            text = stringResource(R.string.step_by_step_instructions),
             style = MaterialTheme.typography.titleSmall,
             color = BrightYellow,
             fontWeight = FontWeight.Bold
@@ -657,7 +675,7 @@ fun BatteryOptimizationInstructions() {
         HorizontalDivider(color = DarkGray, thickness = 1.dp)
         
         Text(
-            text = "For Specific Phone Brands:",
+            text = stringResource(R.string.for_specific_phone_brands),
             style = MaterialTheme.typography.titleSmall,
             color = BrightText,
             fontWeight = FontWeight.Bold
@@ -759,12 +777,12 @@ private fun getSoundName(context: android.content.Context, prefsManager: SharedP
         val uri = prefsManager.customSoundUri?.let { Uri.parse(it) }
         if (uri != null) {
             val ringtone = RingtoneManager.getRingtone(context, uri)
-            ringtone?.getTitle(context) ?: "Default System Sound"
+            ringtone?.getTitle(context) ?: context.getString(R.string.default_sound)
         } else {
-            "Default System Sound"
+            context.getString(R.string.default_sound)
         }
     } catch (e: Exception) {
-        "Default System Sound"
+        context.getString(R.string.default_sound)
     }
 }
 

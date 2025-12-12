@@ -2,6 +2,7 @@ package com.logact.peereminder
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -15,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -22,6 +25,7 @@ import com.logact.peereminder.alarm.AlarmScheduler
 import com.logact.peereminder.data.SharedPrefsManager
 import com.logact.peereminder.ui.theme.*
 import com.logact.peereminder.utils.PermissionHelper
+import com.logact.peereminder.R
 import android.provider.Settings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -226,7 +230,7 @@ fun MainScreen(
                         )
                     ) {
                         Text(
-                            text = "🧪 TEST MODE",
+                            text = stringResource(R.string.test_mode),
                             style = MaterialTheme.typography.bodyMedium,
                             color = BrightYellow,
                             fontWeight = FontWeight.Bold,
@@ -258,7 +262,7 @@ fun MainScreen(
             ) {
                 // Status text (ACTIVE/PAUSED)
                 Text(
-                    text = if (isActive) "ACTIVE" else "PAUSED",
+                    text = if (isActive) stringResource(R.string.status_active) else stringResource(R.string.status_paused),
                     style = MaterialTheme.typography.displayLarge,
                     color = if (isActive) BrightGreen else BrightRed,
                     fontWeight = FontWeight.Bold,
@@ -270,7 +274,7 @@ fun MainScreen(
                 // Time display
                 if (isActive && timeRemaining.isNotEmpty()) {
                     Text(
-                        text = "Time Remaining:",
+                        text = stringResource(R.string.time_remaining),
                         style = MaterialTheme.typography.titleLarge,
                         color = BrightText,
                         textAlign = TextAlign.Center
@@ -285,7 +289,7 @@ fun MainScreen(
                     )
                 } else if (isActive && nextAlarmTime.isNotEmpty()) {
                     Text(
-                        text = "Next Reminder At:",
+                        text = stringResource(R.string.next_reminder_at),
                         style = MaterialTheme.typography.titleLarge,
                         color = BrightText,
                         textAlign = TextAlign.Center
@@ -300,7 +304,7 @@ fun MainScreen(
                     )
                 } else {
                     Text(
-                        text = "Reminder is paused",
+                        text = stringResource(R.string.reminder_is_paused),
                         style = MaterialTheme.typography.titleLarge,
                         color = BrightText,
                         textAlign = TextAlign.Center
@@ -329,14 +333,14 @@ fun MainScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "⚠️ Battery Optimization Enabled",
+                                text = "⚠️ ${stringResource(R.string.battery_optimization_title)}",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = BrightYellow,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Alarms may not work reliably. Disable battery optimization for best results.",
+                                text = stringResource(R.string.battery_optimization_warning),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = BrightText
                             )
@@ -345,7 +349,7 @@ fun MainScreen(
                             onClick = { showBatteryOptimizationDialog = true }
                         ) {
                             Text(
-                                text = "Fix",
+                                text = stringResource(R.string.fix),
                                 color = BrightYellow,
                                 fontWeight = FontWeight.Bold
                             )
@@ -373,14 +377,14 @@ fun MainScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "ℹ️ Full-Screen When Unlocked",
+                                text = "ℹ️ ${stringResource(R.string.display_over_other_apps)}",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = BrightYellow,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Grant 'Display over other apps' permission for full-screen alarms when device is unlocked.",
+                                text = stringResource(R.string.display_over_other_apps_message),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = BrightText
                             )
@@ -389,7 +393,7 @@ fun MainScreen(
                             onClick = { showOverlayPermissionDialog = true }
                         ) {
                             Text(
-                                text = "Grant",
+                                text = stringResource(R.string.grant),
                                 color = BrightYellow,
                                 fontWeight = FontWeight.Bold
                             )
@@ -421,7 +425,7 @@ fun MainScreen(
                 )
             ) {
                 Text(
-                    text = if (isActive) "PAUSE REMINDER" else "START REMINDER",
+                    text = if (isActive) stringResource(R.string.pause_reminder) else stringResource(R.string.start_reminder),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = BrightText
@@ -436,14 +440,14 @@ fun MainScreen(
             onDismissRequest = { showExactAlarmDialog = false },
             title = {
                 Text(
-                    text = "Permission Required",
+                    text = stringResource(R.string.permission_required),
                     style = MaterialTheme.typography.titleLarge,
                     color = BrightText
                 )
             },
             text = {
                 Text(
-                    text = "This app needs permission to schedule exact alarms for reliable reminders. Please grant this permission in Settings.",
+                    text = stringResource(R.string.exact_alarm_permission_message_detailed),
                     style = MaterialTheme.typography.bodyLarge,
                     color = BrightText
                 )
@@ -459,7 +463,7 @@ fun MainScreen(
                     )
                 ) {
                     Text(
-                        text = "Open Settings",
+                        text = stringResource(R.string.open_settings),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText
                     )
@@ -470,7 +474,7 @@ fun MainScreen(
                     onClick = { showExactAlarmDialog = false }
                 ) {
                     Text(
-                        text = "Later",
+                        text = stringResource(R.string.later),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText
                     )
@@ -486,14 +490,14 @@ fun MainScreen(
             onDismissRequest = { showNotificationPermissionDialog = false },
             title = {
                 Text(
-                    text = "Notification Permission",
+                    text = stringResource(R.string.notification_permission),
                     style = MaterialTheme.typography.titleLarge,
                     color = BrightText
                 )
             },
             text = {
                 Text(
-                    text = "This app needs notification permission to show alarm reminders when the app is closed or the screen is locked.",
+                    text = stringResource(R.string.notification_permission_message),
                     style = MaterialTheme.typography.bodyLarge,
                     color = BrightText
                 )
@@ -509,7 +513,7 @@ fun MainScreen(
                     )
                 ) {
                     Text(
-                        text = "Grant Permission",
+                        text = stringResource(R.string.grant_permission),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText
                     )
@@ -520,7 +524,7 @@ fun MainScreen(
                     onClick = { showNotificationPermissionDialog = false }
                 ) {
                     Text(
-                        text = "Later",
+                        text = stringResource(R.string.later),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText
                     )
@@ -538,7 +542,7 @@ fun MainScreen(
             onDismissRequest = { showBatteryOptimizationDialog = false },
             title = {
                 Text(
-                    text = "Battery Optimization Required",
+                    text = stringResource(R.string.battery_optimization_required),
                     style = MaterialTheme.typography.titleLarge,
                     color = BrightText,
                     fontWeight = FontWeight.Bold
@@ -550,13 +554,13 @@ fun MainScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Battery optimization can prevent alarms from working when the app is in the background, screen is locked, or app is closed.",
+                        text = stringResource(R.string.battery_optimization_message),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText
                     )
                     
                     Text(
-                        text = "To fix this, you need to disable battery optimization for this app.",
+                        text = stringResource(R.string.battery_optimization_fix),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText,
                         fontWeight = FontWeight.Bold
@@ -567,7 +571,7 @@ fun MainScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = if (showInstructions) "Hide Instructions" else "Show Step-by-Step Instructions",
+                            text = if (showInstructions) stringResource(R.string.hide_instructions) else stringResource(R.string.show_instructions),
                             color = BrightYellow
                         )
                     }
@@ -577,15 +581,15 @@ fun MainScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Quick Steps:",
+                                text = stringResource(R.string.quick_steps),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = BrightYellow,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text("1. Tap 'Open Settings' button below", style = MaterialTheme.typography.bodySmall, color = BrightText)
-                            Text("2. You'll see a popup - tap 'Allow'", style = MaterialTheme.typography.bodySmall, color = BrightText)
-                            Text("3. If no popup, find 'Pee Reminder' in the list", style = MaterialTheme.typography.bodySmall, color = BrightText)
-                            Text("4. Change to 'Don't optimize' or 'Not optimized'", style = MaterialTheme.typography.bodySmall, color = BrightText)
+                            Text("1. ${stringResource(R.string.open_settings)}", style = MaterialTheme.typography.bodySmall, color = BrightText)
+                            Text("2. ${stringResource(R.string.later)}", style = MaterialTheme.typography.bodySmall, color = BrightText)
+                            Text("3. ${stringResource(R.string.later)}", style = MaterialTheme.typography.bodySmall, color = BrightText)
+                            Text("4. ${stringResource(R.string.later)}", style = MaterialTheme.typography.bodySmall, color = BrightText)
                             
                             HorizontalDivider(color = DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
                             
@@ -638,7 +642,7 @@ fun MainScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Open Settings",
+                        text = stringResource(R.string.open_settings),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText,
                         fontWeight = FontWeight.Bold
@@ -651,7 +655,7 @@ fun MainScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Later",
+                        text = stringResource(R.string.later),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText
                     )
@@ -668,7 +672,7 @@ fun MainScreen(
             onDismissRequest = { showOverlayPermissionDialog = false },
             title = {
                 Text(
-                    text = "Display Over Other Apps",
+                    text = stringResource(R.string.display_over_other_apps),
                     style = MaterialTheme.typography.titleLarge,
                     color = BrightText,
                     fontWeight = FontWeight.Bold
@@ -680,13 +684,13 @@ fun MainScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "This permission allows the app to show full-screen alarms even when your device is unlocked.",
+                        text = stringResource(R.string.display_over_other_apps_message),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText
                     )
                     
                     Text(
-                        text = "Without this permission:",
+                        text = stringResource(R.string.without_permission),
                         style = MaterialTheme.typography.bodyMedium,
                         color = BrightText,
                         fontWeight = FontWeight.Bold
@@ -703,7 +707,7 @@ fun MainScreen(
                     )
                     
                     Text(
-                        text = "With this permission:",
+                        text = stringResource(R.string.with_permission),
                         style = MaterialTheme.typography.bodyMedium,
                         color = BrightText,
                         fontWeight = FontWeight.Bold
@@ -717,7 +721,7 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Text(
-                        text = "To grant this permission:",
+                        text = stringResource(R.string.to_grant_permission),
                         style = MaterialTheme.typography.bodyMedium,
                         color = BrightText,
                         fontWeight = FontWeight.Bold
@@ -751,7 +755,7 @@ fun MainScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Open Settings",
+                        text = stringResource(R.string.open_settings),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText,
                         fontWeight = FontWeight.Bold
@@ -764,7 +768,7 @@ fun MainScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Later",
+                        text = stringResource(R.string.later),
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrightText
                     )
@@ -805,6 +809,6 @@ private fun formatNextAlarmTime(
     val nextAlarm = alarmScheduler.getNextAlarmTime()
     if (nextAlarm <= 0) return ""
     
-    val dateFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+    val dateFormat = SimpleDateFormat("h:mm a", Locale("zh", "CN"))
     return dateFormat.format(Date(nextAlarm))
 }

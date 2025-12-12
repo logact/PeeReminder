@@ -11,6 +11,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import com.logact.peereminder.ReminderActivity
+import com.logact.peereminder.R
 
 /**
  * Overlay window to show full-screen alarm when device is unlocked
@@ -128,7 +129,7 @@ class OverlayAlarmWindow(private val context: Context) {
         
         // Main message
         val messageText = TextView(context).apply {
-            text = "Time to Go!"
+            text = context.getString(R.string.time_to_go)
             textSize = 36f
             setTextColor(android.graphics.Color.WHITE)
             gravity = android.view.Gravity.CENTER
@@ -137,7 +138,7 @@ class OverlayAlarmWindow(private val context: Context) {
         
         // Dismiss button
         val dismissButton = Button(context).apply {
-            text = "I HEARD IT"
+            text = context.getString(R.string.i_heard_it)
             textSize = 24f
             setTextColor(android.graphics.Color.WHITE)
             setBackgroundColor(android.graphics.Color.parseColor("#4CAF50"))

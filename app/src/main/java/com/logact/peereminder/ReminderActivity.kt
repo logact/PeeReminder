@@ -16,6 +16,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.logact.peereminder.alarm.AlarmScheduler
 import com.logact.peereminder.data.SharedPrefsManager
+import com.logact.peereminder.R
 
 class ReminderActivity : AppCompatActivity() {
     private lateinit var prefsManager: SharedPrefsManager
@@ -98,7 +99,7 @@ class ReminderActivity : AppCompatActivity() {
         
         // Main message
         val messageText = TextView(this).apply {
-            text = "Time to Go!"
+            text = getString(R.string.time_to_go)
             textSize = 36f // Large font
             setTextColor(android.graphics.Color.WHITE)
             gravity = android.view.Gravity.CENTER
@@ -107,7 +108,7 @@ class ReminderActivity : AppCompatActivity() {
         
         // Dismiss button
         val dismissButton = Button(this).apply {
-            text = "I HEARD IT"
+            text = getString(R.string.i_heard_it)
             textSize = 24f // Large font
             setTextColor(android.graphics.Color.WHITE)
             setBackgroundColor(android.graphics.Color.parseColor("#4CAF50")) // Green
