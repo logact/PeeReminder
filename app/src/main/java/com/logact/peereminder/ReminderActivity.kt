@@ -1,6 +1,9 @@
 package com.logact.peereminder
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
@@ -23,6 +26,8 @@ class ReminderActivity : AppCompatActivity() {
     private lateinit var alarmScheduler: AlarmScheduler
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,6 +69,14 @@ class ReminderActivity : AppCompatActivity() {
         
         prefsManager = SharedPrefsManager.getInstance(this)
         alarmScheduler = AlarmScheduler(this)
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        
+        android.util.Log.d("ReminderActivity", "AudioManager initialized: ${audioManager != null}")
+        if (audioManager != null) {
+            android.util.Log.d("ReminderActivity", "Alarm stream volume: ${audioManager?.getStreamVolume(AudioManager.STREAM_ALARM)}")
+            android.util.Log.d("ReminderActivity", "Alarm stream max volume: ${audioManager?.getStreamMaxVolume(AudioManager.STREAM_ALARM)}")
+            android.util.Log.d("ReminderActivity", "Ringer mode: ${audioManager?.ringerMode} (0=SILENT, 1=VIBRATE, 2=NORMAL)")
+        }
         
         // Dismiss the notification since we're showing the activity
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
@@ -130,44 +143,188 @@ class ReminderActivity : AppCompatActivity() {
     
     private fun startAlarm() {
         val alertType = prefsManager.alertType
+        android.util.Log.d("ReminderActivity", "=== START ALARM ===")
+        android.util.Log.d("ReminderActivity", "Alert type: '$alertType'")
         
         // Play sound if needed
         if (alertType == "SOUND" || alertType == "BOTH") {
+            android.util.Log.d("ReminderActivity", "Should play sound - calling playSound()")
             playSound()
+        } else {
+            android.util.Log.d("ReminderActivity", "Sound not requested (alertType='$alertType')")
         }
         
         // Vibrate if needed
         if (alertType == "VIBRATION" || alertType == "BOTH") {
+            android.util.Log.d("ReminderActivity", "Should vibrate - calling startVibration()")
             startVibration()
+        } else {
+            android.util.Log.d("ReminderActivity", "Vibration not requested (alertType='$alertType')")
         }
     }
     
     private fun playSound() {
+        android.util.Log.d("ReminderActivity", "=== PLAY SOUND ===")
         try {
-            val soundUri = prefsManager.customSoundUri?.let { Uri.parse(it) }
+            // Request audio focus for alarm playback
+            android.util.Log.d("ReminderActivity", "Requesting audio focus...")
+            requestAudioFocus()
+            
+            val customSoundUri = prefsManager.customSoundUri
+            val soundUri = customSoundUri?.let { Uri.parse(it) }
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             
+            android.util.Log.d("ReminderActivity", "Custom sound URI: $customSoundUri")
+            android.util.Log.d("ReminderActivity", "Using sound URI: $soundUri")
+            
+            android.util.Log.d("ReminderActivity", "Creating MediaPlayer...")
             mediaPlayer = MediaPlayer.create(this, soundUri)
+            
+            if (mediaPlayer == null) {
+                android.util.Log.e("ReminderActivity", "ERROR: MediaPlayer.create() returned null!")
+                android.util.Log.e("ReminderActivity", "Trying fallback to default alarm sound...")
+                
+                // Fallback to default alarm sound
+                try {
+                    val defaultUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    android.util.Log.d("ReminderActivity", "Fallback: Using default alarm URI: $defaultUri")
+                    mediaPlayer = MediaPlayer.create(this, defaultUri)
+                    
+                    if (mediaPlayer == null) {
+                        android.util.Log.e("ReminderActivity", "ERROR: Fallback MediaPlayer.create() also returned null!")
+                        return
+                    }
+                } catch (e2: Exception) {
+                    android.util.Log.e("ReminderActivity", "ERROR in fallback: ${e2.message}", e2)
+                    return
+                }
+            }
+            
+            android.util.Log.d("ReminderActivity", "MediaPlayer created successfully")
             mediaPlayer?.apply {
+                // Set audio stream type to ALARM for proper volume control
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    android.util.Log.d("ReminderActivity", "Setting AudioAttributes (API >= 21)")
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                } else {
+                    android.util.Log.d("ReminderActivity", "Setting audio stream type (API < 21)")
+                    @Suppress("DEPRECATION")
+                    setAudioStreamType(AudioManager.STREAM_ALARM)
+                }
+                
                 isLooping = true
                 setVolume(1.0f, 1.0f)
+                
+                android.util.Log.d("ReminderActivity", "Starting MediaPlayer...")
+                android.util.Log.d("ReminderActivity", "MediaPlayer state before start: isPlaying=${isPlaying}")
                 start()
+                android.util.Log.d("ReminderActivity", "MediaPlayer started! isPlaying=${isPlaying}")
+                
+                if (!isPlaying) {
+                    android.util.Log.e("ReminderActivity", "WARNING: MediaPlayer.start() called but isPlaying is still false!")
+                }
             }
         } catch (e: Exception) {
+            android.util.Log.e("ReminderActivity", "ERROR in playSound(): ${e.message}", e)
             e.printStackTrace()
             // Fallback to default alarm sound
             try {
+                android.util.Log.d("ReminderActivity", "Exception caught, trying fallback...")
                 val defaultUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                android.util.Log.d("ReminderActivity", "Fallback: Using default alarm URI: $defaultUri")
                 mediaPlayer = MediaPlayer.create(this, defaultUri)
+                
+                if (mediaPlayer == null) {
+                    android.util.Log.e("ReminderActivity", "ERROR: Fallback MediaPlayer.create() returned null!")
+                    return
+                }
+                
                 mediaPlayer?.apply {
+                    // Set audio stream type to ALARM for proper volume control
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build()
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        setAudioStreamType(AudioManager.STREAM_ALARM)
+                    }
+                    
                     isLooping = true
                     setVolume(1.0f, 1.0f)
+                    android.util.Log.d("ReminderActivity", "Starting fallback MediaPlayer...")
                     start()
+                    android.util.Log.d("ReminderActivity", "Fallback MediaPlayer started! isPlaying=${isPlaying}")
                 }
             } catch (e2: Exception) {
+                android.util.Log.e("ReminderActivity", "ERROR in fallback: ${e2.message}", e2)
                 e2.printStackTrace()
             }
         }
+    }
+    
+    private fun requestAudioFocus() {
+        if (audioManager == null) {
+            android.util.Log.e("ReminderActivity", "ERROR: AudioManager is null!")
+            return
+        }
+        
+        audioManager?.let { am ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                android.util.Log.d("ReminderActivity", "Requesting audio focus (API >= 26)")
+                val audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                
+                audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(audioAttributes)
+                    .setAcceptsDelayedFocusGain(false)
+                    .build()
+                
+                audioFocusRequest?.let { request ->
+                    val result = am.requestAudioFocus(request)
+                    android.util.Log.d("ReminderActivity", "Audio focus request result: $result (1=GRANTED, 0=FAILED, -1=DELAYED)")
+                    if (result != 1) { // 1 = AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                        android.util.Log.w("ReminderActivity", "WARNING: Audio focus not granted! Result: $result")
+                    }
+                }
+            } else {
+                android.util.Log.d("ReminderActivity", "Requesting audio focus (API < 26)")
+                @Suppress("DEPRECATION")
+                val result = am.requestAudioFocus(
+                    null,
+                    AudioManager.STREAM_ALARM,
+                    AudioManager.AUDIOFOCUS_GAIN
+                )
+                android.util.Log.d("ReminderActivity", "Audio focus request result: $result (1=GRANTED, 0=FAILED)")
+                if (result != 1) { // 1 = AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                    android.util.Log.w("ReminderActivity", "WARNING: Audio focus not granted! Result: $result")
+                }
+            }
+        }
+    }
+    
+    private fun releaseAudioFocus() {
+        audioManager?.let { am ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { request ->
+                    am.abandonAudioFocusRequest(request)
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                am.abandonAudioFocus(null)
+            }
+        }
+        audioFocusRequest = null
     }
     
     private fun startVibration() {
@@ -201,6 +358,9 @@ class ReminderActivity : AppCompatActivity() {
         mediaPlayer?.release()
         mediaPlayer = null
         
+        // Release audio focus
+        releaseAudioFocus()
+        
         // Stop vibration
         vibrator?.cancel()
         vibrator = null
@@ -219,6 +379,7 @@ class ReminderActivity : AppCompatActivity() {
         mediaPlayer?.stop()
         mediaPlayer?.release()
         mediaPlayer = null
+        releaseAudioFocus()
         vibrator?.cancel()
     }
 }
