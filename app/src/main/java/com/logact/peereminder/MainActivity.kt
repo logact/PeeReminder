@@ -319,10 +319,10 @@ fun MainScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(paddingValues)
                 .padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top: Test mode indicator and Settings button
             Row(
@@ -361,7 +361,7 @@ fun MainScreen(
                 }
             }
             
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(32.dp))
             
             // Middle: Status and time display
             Column(
@@ -420,7 +420,7 @@ fun MainScreen(
                 }
             }
             
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(32.dp))
             
             // Battery optimization warning (if optimized)
             if (isBatteryOptimized && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

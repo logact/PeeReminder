@@ -5,9 +5,9 @@
 
 set -e
 
-KEYSTORE_NAME="pe reminder-release.jks"
+KEYSTORE_NAME="peeReminder-release.jks"
 KEYSTORE_PATH="app/${KEYSTORE_NAME}"
-KEY_ALIAS="pe reminder"
+KEY_ALIAS="peeReminder"
 VALIDITY_YEARS=25
 
 echo "=========================================="

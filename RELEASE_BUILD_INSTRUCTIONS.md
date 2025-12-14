@@ -35,8 +35,8 @@ If you prefer to create the keystore manually:
 
 ```bash
 keytool -genkey -v \
-    -keystore app/pe reminder-release.jks \
-    -alias "pe reminder" \
+    -keystore app/peeReminder-release.jks \
+    -alias "peeReminder" \
     -keyalg RSA \
     -keysize 2048 \
     -validity 9125 \
@@ -57,9 +57,9 @@ You'll be prompted for:
 
 2. Edit `keystore.properties` and fill in your actual values:
    ```properties
-   storeFile=app/pe reminder-release.jks
+   storeFile=peeReminder-release.jks
    storePassword=your_actual_store_password
-   keyAlias=pe reminder
+   keyAlias=peeReminder
    keyPassword=your_actual_key_password
    ```
 
@@ -189,3 +189,4 @@ app/build/outputs/apk/release/app-release.apk
 ```
 
 You can rename this file before sharing (e.g., `PeeReminder-v1.0.apk`).
+ 

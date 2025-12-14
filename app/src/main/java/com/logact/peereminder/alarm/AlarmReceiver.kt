@@ -237,25 +237,52 @@ class AlarmReceiver : BroadcastReceiver() {
             // Skip direct launch attempts - they will be blocked by Android 13
             val activityStarted = false
             
+            // Check device lock state BEFORE creating notification
+            val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            val isDeviceLocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                keyguardManager.isDeviceLocked
+            } else {
+                @Suppress("DEPRECATION")
+                keyguardManager.isKeyguardLocked
+            }
+            
+            Log.d(TAG, "Device lock state: ${if (isDeviceLocked) "LOCKED" else "UNLOCKED"}")
+            
             // PRIMARY METHOD: Full-screen intent notification
             // This is the ONLY way to show full-screen activity from background on Android 13
             // Full-screen intent works when device is LOCKED, shows as notification when UNLOCKED
+            // For MagicOS, we also try direct launch when locked as a fallback
             try {
                 Log.d(TAG, "=== PRIMARY METHOD: Full-screen intent notification ===")
                 Log.d(TAG, "This is the ONLY method that works on Android 13 from background")
                 
-                // CRITICAL: For full-screen intents to work on Android 13:
+                // CRITICAL: For full-screen intents to work on Android 13/MagicOS:
                 // 1. Channel importance MUST be IMPORTANCE_MAX (5)
-                // 2. Notification priority should be PRIORITY_HIGH (not MAX - MAX is deprecated)
+                // 2. Notification priority: Use PRIORITY_MAX for MagicOS (even if deprecated, it works better)
                 // 3. setFullScreenIntent must be called with true
                 // 4. Category should be CATEGORY_ALARM
                 // 5. PendingIntent should NOT have FLAG_ONE_SHOT
+                // 6. For MagicOS, also try direct launch when locked
+                
+                // Check if this is MagicOS or similar custom ROM
+                val isMagicOS = Build.MANUFACTURER.lowercase().contains("honor") || 
+                               Build.MANUFACTURER.lowercase().contains("huawei")
+                
+                // Use PRIORITY_MAX for MagicOS (works better than PRIORITY_HIGH on custom ROMs)
+                val notificationPriority = if (isMagicOS) {
+                    @Suppress("DEPRECATION")
+                    NotificationCompat.PRIORITY_MAX // MAX works better on MagicOS
+                } else {
+                    NotificationCompat.PRIORITY_HIGH // HIGH for standard Android
+                }
+                
+                Log.d(TAG, "Using notification priority: $notificationPriority (MagicOS: $isMagicOS)")
                 
                 val fullScreenNotification = NotificationCompat.Builder(context, CHANNEL_ID)
                     .setContentTitle("⏰ Time to Go!")
                     .setContentText("Pee Reminder - Tap to open")
                     .setSmallIcon(android.R.drawable.ic_dialog_info)
-                    .setPriority(NotificationCompat.PRIORITY_HIGH) // HIGH priority (MAX is deprecated)
+                    .setPriority(notificationPriority)
                     .setCategory(NotificationCompat.CATEGORY_ALARM) // ALARM category - CRITICAL
                     .setFullScreenIntent(fullScreenPendingIntent, true) // PRIMARY: full-screen intent - true is critical
                     .setContentIntent(fullScreenPendingIntent) // Backup: tap to launch
@@ -282,16 +309,50 @@ class AlarmReceiver : BroadcastReceiver() {
                 notificationManager.notify(NOTIFICATION_ID, fullScreenNotification)
                 Log.d(TAG, "✅ Full-screen intent notification posted")
                 
-                // Check device lock state
-                val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-                val isDeviceLocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    keyguardManager.isDeviceLocked
-                } else {
-                    @Suppress("DEPRECATION")
-                    keyguardManager.isKeyguardLocked
+                // MAGICOS ENHANCEMENT: Try direct activity launch when locked
+                // MagicOS might allow direct launch for alarm apps even when locked
+                // This is a fallback if full-screen intent doesn't work
+                if (isDeviceLocked) {
+                    Log.d(TAG, "=== MAGICOS: Attempting direct activity launch when locked ===")
+                    try {
+                        // Try to launch activity directly with proper flags for lock screen
+                        val directLaunchIntent = Intent(context, ReminderActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                    Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                            putExtra("from_alarm", true)
+                            putExtra("direct_launch", true) // Mark as direct launch
+                        }
+                        
+                        // For Android 13+, try with ActivityOptions to allow background launch
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            try {
+                                val options = ActivityOptions.makeBasic()
+                                // Try to allow background activity start for alarm apps
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                    options.setPendingIntentBackgroundActivityStartMode(
+                                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                                    )
+                                }
+                                context.startActivity(directLaunchIntent, options.toBundle())
+                                Log.d(TAG, "✅ Direct activity launch attempted (Android 13+)")
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Direct launch blocked (expected on Android 13): ${e.message}")
+                                // This is expected - Android 13 blocks background activity launches
+                                // Full-screen intent should handle it instead
+                            }
+                        } else {
+                            context.startActivity(directLaunchIntent)
+                            Log.d(TAG, "✅ Direct activity launch attempted (Android < 13)")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Direct launch failed (expected): ${e.message}")
+                        // This is expected - full-screen intent will handle it
+                    }
                 }
-                
-                Log.d(TAG, "Device lock state: ${if (isDeviceLocked) "LOCKED" else "UNLOCKED"}")
                 
                 // Show overlay window when device is UNLOCKED (requires SYSTEM_ALERT_WINDOW permission)
                 // This is a workaround for Android 13's limitation
@@ -349,14 +410,19 @@ class AlarmReceiver : BroadcastReceiver() {
                 Log.d(TAG, "Device UNLOCKED: Notification appears - user must tap to open")
                 Log.d(TAG, "This is Android 13 security behavior - background activity launches are blocked")
                 
-                Log.d(TAG, "=== ORIGINOS 4 SPECIFIC NOTES ===")
-                Log.d(TAG, "OriginOS 4 may block full-screen intents even with permission")
-                Log.d(TAG, "Direct launch with ActivityOptions is more reliable on OriginOS")
-                Log.d(TAG, "If activity doesn't appear, check:")
+                Log.d(TAG, "=== MAGICOS/ORIGINOS 4 SPECIFIC NOTES ===")
+                Log.d(TAG, "MagicOS/OriginOS may block full-screen intents even with permission")
+                Log.d(TAG, "Direct launch with ActivityOptions is more reliable on custom ROMs")
+                Log.d(TAG, "If activity doesn't appear when LOCKED, check:")
                 Log.d(TAG, "  1. Settings → Apps → Pee Reminder → Battery → No restrictions")
                 Log.d(TAG, "  2. Settings → Apps → Pee Reminder → Auto-start → Enabled")
-                Log.d(TAG, "  3. Settings → Apps → Special App Access → Full Screen Intents")
+                Log.d(TAG, "  3. Settings → Apps → Special App Access → Full Screen Intents → Enable")
                 Log.d(TAG, "  4. Settings → Battery → Background restrictions → Allow Pee Reminder")
+                Log.d(TAG, "  5. Settings → Apps → Pee Reminder → Notifications → Pee Reminder Alarms → Urgent")
+                Log.d(TAG, "  6. Settings → Notifications → Pee Reminder → Allow all")
+                if (isMagicOS) {
+                    Log.d(TAG, "  7. MagicOS: Settings → Apps → Pee Reminder → Display over other apps → Enable")
+                }
                 
                 // Verify notification was posted
                 try {
@@ -452,6 +518,7 @@ class AlarmReceiver : BroadcastReceiver() {
             
             // Create channel with IMPORTANCE_MAX (REQUIRED for automatic full-screen intent)
             // IMPORTANCE_HIGH will NOT trigger full-screen intent automatically
+            // This is especially critical for MagicOS and other custom ROMs
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Pee Reminder Alarms",
@@ -461,13 +528,20 @@ class AlarmReceiver : BroadcastReceiver() {
                 enableLights(true)
                 enableVibration(true)
                 setShowBadge(false)
-                // Allow full-screen intents and bypass DND
+                // Allow full-screen intents and bypass DND - CRITICAL for MagicOS
                 setBypassDnd(true)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 }
                 // Set sound to null (handled by activity)
                 setSound(null, null)
+            }
+            
+            // Log MagicOS detection for debugging
+            val isMagicOS = Build.MANUFACTURER.lowercase().contains("honor") || 
+                           Build.MANUFACTURER.lowercase().contains("huawei")
+            if (isMagicOS) {
+                Log.d(TAG, "MagicOS detected - ensuring maximum notification priority for full-screen")
             }
             
             try {
