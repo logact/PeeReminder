@@ -64,6 +64,16 @@
         </receiver>
 
         <receiver
+            android:name=".alarm.DailyResetReceiver"
+            android:enabled="true"
+            android:exported="false"
+            android:directBootAware="true">
+            <intent-filter android:priority="1000">
+                <action android:name="com.logact.peereminder.DAILY_RESET" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".alarm.BootReceiver"
             android:enabled="true"
             android:exported="true">

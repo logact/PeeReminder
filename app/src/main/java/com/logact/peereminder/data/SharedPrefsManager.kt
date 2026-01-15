@@ -21,10 +21,10 @@ class SharedPrefsManager private constructor(context: Context) {
         private const val KEY_ALERT_TYPE = "alert_type"
         private const val KEY_CUSTOM_SOUND_URI = "custom_sound_uri"
         private const val KEY_QUIET_HOURS_ENABLED = "quiet_hours_enabled"
+        private const val KEY_LAST_RESET_DATE = "last_reset_date"
         
         // Default values
-        // Note: In test mode (DEBUG), this stores seconds; in production, it stores minutes
-        private const val DEFAULT_INTERVAL_MINUTES = 120 // 2 hours (production) or 120 seconds (test mode default, but will be overridden to 10 in SettingsActivity)
+        private const val DEFAULT_INTERVAL_MINUTES = 120 // 2 hours
         private const val DEFAULT_QUIET_HOURS_START = 22 // 10 PM
         private const val DEFAULT_QUIET_HOURS_END = 7 // 7 AM
         private const val DEFAULT_ALERT_TYPE = "BOTH" // Sound + Vibration
@@ -83,5 +83,10 @@ class SharedPrefsManager private constructor(context: Context) {
     var customSoundUri: String?
         get() = prefs.getString(KEY_CUSTOM_SOUND_URI, null)
         set(value) = prefs.edit().putString(KEY_CUSTOM_SOUND_URI, value).apply()
+    
+    // Last reset date (format: "yyyy-MM-dd")
+    var lastResetDate: String?
+        get() = prefs.getString(KEY_LAST_RESET_DATE, null)
+        set(value) = prefs.edit().putString(KEY_LAST_RESET_DATE, value).apply()
 }
 

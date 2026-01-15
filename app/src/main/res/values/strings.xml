@@ -51,8 +51,6 @@
     <string name="to_grant_permission">To grant this permission:</string>
     <string name="time_to_go">Time to Go!</string>
     <string name="i_heard_it">I HEARD IT</string>
-    <string name="test_mode">🧪 TEST MODE</string>
-    <string name="test_mode_intervals">(Intervals in seconds)</string>
     <string name="fix">Fix</string>
     <string name="grant">Grant</string>
     <string name="back_arrow">←</string>

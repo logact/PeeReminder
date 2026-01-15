@@ -94,6 +94,14 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        
+        // Schedule daily reset on app start
+        try {
+            alarmScheduler.scheduleDailyReset()
+            Log.d("MainActivity", "Daily reset scheduled on app start")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to schedule daily reset on app start", e)
+        }
     }
     
     override fun onResume() {
@@ -104,6 +112,14 @@ class MainActivity : ComponentActivity() {
         
         // Check if we missed an alarm (OriginOS 4 blocking scenario)
         checkForMissedAlarm()
+        
+        // Ensure daily reset is scheduled (in case it was cancelled or missed)
+        try {
+            alarmScheduler.scheduleDailyReset()
+            Log.d("MainActivity", "Daily reset verified/rescheduled on resume")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to schedule daily reset on resume", e)
+        }
     }
     
     /**
@@ -216,6 +232,10 @@ class MainActivity : ComponentActivity() {
             } else {
                 Log.w("MainActivity", "⚠️ Alarm verification failed - may need to reschedule")
             }
+            
+            // Schedule daily reset when reminder starts
+            alarmScheduler.scheduleDailyReset()
+            Log.d("MainActivity", "Daily reset scheduled when reminder started")
         } catch (e: Exception) {
             Log.e("MainActivity", "Failed to start reminder", e)
             prefsManager.isActive = false
@@ -240,11 +260,6 @@ fun MainScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefsManager = SharedPrefsManager.getInstance(context)
     val alarmScheduler = AlarmScheduler(context)
-    
-    // Check if app is in debug mode
-    val isTestMode = remember {
-        (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-    }
     
     var isActive by remember { mutableStateOf(prefsManager.isActive) }
     var timeRemaining by remember { mutableStateOf(calculateTimeRemaining(prefsManager, alarmScheduler)) }
@@ -324,31 +339,12 @@ fun MainScreen(
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top: Test mode indicator and Settings button
+            // Top: Settings button
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Test Mode Indicator
-                if (isTestMode) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = BrightYellow.copy(alpha = 0.3f)
-                        )
-                    ) {
-                        Text(
-                            text = stringResource(R.string.test_mode),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = BrightYellow,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
-                    }
-                } else {
-                    Spacer(modifier = Modifier.width(1.dp))
-                }
-                
                 // Settings button
                 IconButton(
                     onClick = onSettingsClick,

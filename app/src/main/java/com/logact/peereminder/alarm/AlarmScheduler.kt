@@ -7,18 +7,17 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.logact.peereminder.data.SharedPrefsManager
+import java.util.Calendar
 
 class AlarmScheduler(private val context: Context) {
     private val alarmManager: AlarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     private val prefsManager: SharedPrefsManager = SharedPrefsManager.getInstance(context)
     
-    // Check if app is in debug mode
-    private val isTestMode: Boolean
-        get() = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-    
     companion object {
         private const val ALARM_ACTION = "com.logact.peereminder.ALARM_TRIGGERED"
+        private const val DAILY_RESET_ACTION = "com.logact.peereminder.DAILY_RESET"
         private const val REQUEST_CODE = 1001
+        private const val DAILY_RESET_REQUEST_CODE = 1002
         private const val TAG = "AlarmScheduler"
     }
     
@@ -170,14 +169,8 @@ class AlarmScheduler(private val context: Context) {
      */
     fun scheduleNextAlarm() {
         val intervalValue = prefsManager.intervalMinutes
-        // In test mode (DEBUG), intervalValue is in seconds; otherwise in minutes
-        val targetTime = if (isTestMode) {
-            // Test mode: interval is in seconds
-            System.currentTimeMillis() + (intervalValue * 1000L)
-        } else {
-            // Production mode: interval is in minutes
-            System.currentTimeMillis() + (intervalValue * 60 * 1000L)
-        }
+        // Interval is in minutes
+        val targetTime = System.currentTimeMillis() + (intervalValue * 60 * 1000L)
         scheduleAlarm(targetTime)
     }
     
@@ -227,6 +220,9 @@ class AlarmScheduler(private val context: Context) {
     /**
      * Reschedule alarm if it's missing or expired
      * This is useful when the app is restarted after being killed
+     * 
+     * IMPORTANT: This method preserves existing alarm times to prevent countdown reset.
+     * It only reschedules when the alarm is truly missing or expired.
      */
     fun ensureAlarmScheduled(): Boolean {
         val nextAlarmTime = prefsManager.nextAlarmTimestamp
@@ -237,19 +233,30 @@ class AlarmScheduler(private val context: Context) {
         Log.d(TAG, "Current time: ${java.util.Date(now)}")
         Log.d(TAG, "Reminder active: ${prefsManager.isActive}")
         
-        // Check if alarm is missing, expired, or not verified
+        // Check if alarm is missing or expired
         val isExpired = nextAlarmTime > 0 && nextAlarmTime <= now
         val isMissing = nextAlarmTime <= 0
-        val notVerified = !verifyAlarmScheduled()
+        val isValid = nextAlarmTime > now
         
-        if (isMissing || isExpired || notVerified) {
-            Log.w(TAG, "Alarm issue detected:")
-            if (isMissing) Log.w(TAG, "  - Alarm timestamp is missing")
-            if (isExpired) Log.w(TAG, "  - Alarm time has passed")
-            if (notVerified) Log.w(TAG, "  - Alarm verification failed")
-            
-            if (prefsManager.isActive) {
-                Log.d(TAG, "Rescheduling alarm...")
+        // Verification check for logging only (not used for decision-making)
+        val notVerified = !verifyAlarmScheduled()
+        if (notVerified) {
+            Log.w(TAG, "Alarm verification check failed (this is informational only)")
+        }
+        
+        if (!prefsManager.isActive) {
+            Log.d(TAG, "Reminder is not active, skipping alarm scheduling")
+            return false
+        }
+        
+        when {
+            isMissing || isExpired -> {
+                // Alarm is missing or expired - reschedule with new time
+                Log.w(TAG, "Alarm issue detected:")
+                if (isMissing) Log.w(TAG, "  - Alarm timestamp is missing")
+                if (isExpired) Log.w(TAG, "  - Alarm time has passed")
+                
+                Log.d(TAG, "Rescheduling alarm with new time...")
                 try {
                     scheduleNextAlarm()
                     Log.d(TAG, "✅ Alarm rescheduled successfully")
@@ -258,13 +265,25 @@ class AlarmScheduler(private val context: Context) {
                     Log.e(TAG, "❌ Failed to reschedule alarm", e)
                     return false
                 }
-            } else {
-                Log.d(TAG, "Reminder is not active, not rescheduling alarm")
+            }
+            isValid -> {
+                // Alarm exists and is valid - re-register it to ensure it's set in AlarmManager
+                // This preserves the countdown while ensuring the alarm is properly scheduled
+                Log.d(TAG, "Alarm timestamp is valid - re-registering with AlarmManager to ensure it's set")
+                try {
+                    scheduleAlarm(nextAlarmTime)
+                    Log.d(TAG, "✅ Alarm re-registered successfully (countdown preserved)")
+                    return true
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Failed to re-register alarm", e)
+                    return false
+                }
+            }
+            else -> {
+                // Should not reach here, but handle gracefully
+                Log.w(TAG, "Unexpected alarm state")
                 return false
             }
-        } else {
-            Log.d(TAG, "✅ Alarm is properly scheduled for: ${java.util.Date(nextAlarmTime)}")
-            return true
         }
     }
     
@@ -284,6 +303,178 @@ class AlarmScheduler(private val context: Context) {
             Log.e(TAG, "❌ Failed to schedule test alarm", e)
             return false
         }
+    }
+    
+    /**
+     * Schedule the daily reset alarm at quietHoursEnd time
+     * This will trigger a reset every day at the specified hour
+     */
+    fun scheduleDailyReset() {
+        Log.d(TAG, "=== SCHEDULING DAILY RESET ===")
+        
+        val resetHour = prefsManager.quietHoursEnd
+        Log.d(TAG, "Reset hour: $resetHour (quiet hours end)")
+        
+        // Calculate the next reset time (today or tomorrow at resetHour)
+        val calendar = Calendar.getInstance()
+        val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
+        val currentMinute = calendar.get(Calendar.MINUTE)
+        
+        // Set to reset hour, minute 0, second 0
+        calendar.set(Calendar.HOUR_OF_DAY, resetHour)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        
+        // If reset time has already passed today, schedule for tomorrow
+        if (currentHour > resetHour || (currentHour == resetHour && currentMinute >= 0)) {
+            calendar.add(Calendar.DAY_OF_YEAR, 1)
+            Log.d(TAG, "Reset time has passed today, scheduling for tomorrow")
+        }
+        
+        val resetTimeMillis = calendar.timeInMillis
+        Log.d(TAG, "Daily reset scheduled for: ${java.util.Date(resetTimeMillis)}")
+        
+        // Create intent for DailyResetReceiver
+        val intent = Intent(context, DailyResetReceiver::class.java).apply {
+            action = DAILY_RESET_ACTION
+            setClass(context, DailyResetReceiver::class.java)
+            setPackage(context.packageName)
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        }
+        
+        val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            DAILY_RESET_REQUEST_CODE,
+            intent,
+            pendingIntentFlags
+        )
+        
+        if (pendingIntent == null) {
+            Log.e(TAG, "❌ CRITICAL: Failed to create PendingIntent for daily reset!")
+            return
+        }
+        
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    resetTimeMillis,
+                    pendingIntent
+                )
+                Log.d(TAG, "✅ Daily reset scheduled with setExactAndAllowWhileIdle")
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    resetTimeMillis,
+                    pendingIntent
+                )
+                Log.d(TAG, "✅ Daily reset scheduled with setExact")
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "❌ Failed to schedule daily reset - permission denied", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to schedule daily reset", e)
+        }
+        
+        Log.d(TAG, "=== DAILY RESET SCHEDULING COMPLETE ===")
+    }
+    
+    /**
+     * Cancel the daily reset alarm
+     */
+    fun cancelDailyReset() {
+        Log.d(TAG, "=== CANCELLING DAILY RESET ===")
+        
+        val intent = Intent(DAILY_RESET_ACTION).apply {
+            setClass(context, DailyResetReceiver::class.java)
+        }
+        
+        val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            DAILY_RESET_REQUEST_CODE,
+            intent,
+            pendingIntentFlags
+        )
+        
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+        
+        Log.d(TAG, "Daily reset cancelled")
+    }
+    
+    /**
+     * Perform the daily reset: cancel current alarm and schedule new one from reset time
+     */
+    fun performDailyReset() {
+        Log.d(TAG, "=== PERFORMING DAILY RESET ===")
+        
+        // Cancel the current reminder alarm if it exists
+        if (prefsManager.isActive && prefsManager.nextAlarmTimestamp > 0) {
+            Log.d(TAG, "Cancelling current reminder alarm")
+            cancelAlarm()
+        }
+        
+        // Only schedule if reminder is active
+        if (!prefsManager.isActive) {
+            Log.d(TAG, "Reminder is not active, skipping alarm scheduling")
+            Log.d(TAG, "=== DAILY RESET PERFORMED ===")
+            return
+        }
+        
+        // Calculate reset time (today at quietHoursEnd)
+        val resetHour = prefsManager.quietHoursEnd
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.HOUR_OF_DAY, resetHour)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        
+        val resetTimeMillis = calendar.timeInMillis
+        val now = System.currentTimeMillis()
+        
+        // Calculate interval in milliseconds
+        val intervalValue = prefsManager.intervalMinutes
+        val intervalMillis = intervalValue * 60 * 1000L // Interval is in minutes
+        
+        // First alarm should be at reset time + interval
+        // This ensures alarms are aligned to intervals from the reset time
+        // Example: Reset at 7:00 AM, interval 2 hours -> alarms at 9:00 AM, 11:00 AM, 1:00 PM, etc.
+        var firstAlarmTime = resetTimeMillis + intervalMillis
+        
+        // If reset time is in the past (reset fired slightly after the hour), 
+        // align to the next interval from reset time
+        if (resetTimeMillis < now) {
+            val timeSinceReset = now - resetTimeMillis
+            val intervalsPassed = (timeSinceReset / intervalMillis) + 1
+            firstAlarmTime = resetTimeMillis + (intervalsPassed * intervalMillis)
+            
+            // Ensure first alarm is in the future
+            if (firstAlarmTime <= now) {
+                firstAlarmTime += intervalMillis
+            }
+            
+            Log.d(TAG, "Reset time was in the past, aligned first alarm to next interval: ${java.util.Date(firstAlarmTime)}")
+        }
+        
+        // Schedule first alarm of the day
+        scheduleAlarm(firstAlarmTime)
+        Log.d(TAG, "✅ First alarm of the day scheduled at: ${java.util.Date(firstAlarmTime)}")
+        Log.d(TAG, "Reset time: ${java.util.Date(resetTimeMillis)}, Interval: $intervalValue minutes")
+        
+        Log.d(TAG, "=== DAILY RESET PERFORMED ===")
     }
 }
 

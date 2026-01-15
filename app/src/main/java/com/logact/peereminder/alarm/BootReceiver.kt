@@ -26,6 +26,9 @@ class BootReceiver : BroadcastReceiver() {
                     alarmScheduler.scheduleNextAlarm()
                 }
             }
+            
+            // Always schedule daily reset on boot (regardless of reminder state)
+            alarmScheduler.scheduleDailyReset()
         }
     }
 }

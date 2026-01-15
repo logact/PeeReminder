@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.logact.peereminder.data.SharedPrefsManager
 import com.logact.peereminder.ui.theme.*
@@ -85,11 +87,7 @@ fun SettingsScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefsManager = SharedPrefsManager.getInstance(context)
-    
-    // Check if app is in debug mode
-    val isTestMode = remember {
-        (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-    }
+    val alarmScheduler = remember { com.logact.peereminder.alarm.AlarmScheduler(context) }
     
     var intervalMinutes by remember { mutableStateOf(prefsManager.intervalMinutes) }
     var quietHoursEnabled by remember { mutableStateOf(prefsManager.quietHoursEnabled) }
@@ -101,15 +99,6 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         // Update sound name when it changes
         customSoundName = getSoundName(context, prefsManager)
-        
-        // Initialize interval based on mode if it hasn't been explicitly set
-        // In test mode, default should be 10 seconds, not 120 (which is production default)
-        if (isTestMode && !prefsManager.hasIntervalBeenSet() && intervalMinutes == 120) {
-            // Value is uninitialized (using SharedPrefsManager default of 120)
-            // Initialize to test mode default of 10 seconds
-            intervalMinutes = 10
-            prefsManager.intervalMinutes = 10
-        }
     }
     
     Scaffold(
@@ -148,100 +137,88 @@ fun SettingsScreen(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Test Mode Indicator
-            if (isTestMode) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = BrightYellow.copy(alpha = 0.3f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.test_mode),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = BrightYellow,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.test_mode_intervals),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = BrightText
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-            // Interval Picker
+            // Interval Input
             SettingsSection(title = stringResource(R.string.interval_setting)) {
-                // Test mode: use seconds for rapid testing
-                val intervals: List<Int>
-                val intervalLabels: List<String>
-                val defaultInterval: Int
+                var intervalText by remember { mutableStateOf(intervalMinutes.toString()) }
+                var isError by remember { mutableStateOf(false) }
                 
-                if (isTestMode) {
-                    // Test mode: intervals in seconds
-                    intervals = listOf(5, 10, 30, 60, 90, 120) // 5s, 10s, 30s, 60s, 90s, 120s
-                    intervalLabels = listOf(
-                        stringResource(R.string.interval_5_seconds),
-                        stringResource(R.string.interval_10_seconds),
-                        stringResource(R.string.interval_30_seconds),
-                        stringResource(R.string.interval_60_seconds),
-                        stringResource(R.string.interval_90_seconds),
-                        stringResource(R.string.interval_120_seconds)
-                    )
-                    defaultInterval = 10 // Default to 10 seconds in test mode
-                } else {
-                    // Production mode: intervals in minutes
-                    intervals = listOf(60, 90, 120, 180) // 1h, 1.5h, 2h, 3h
-                    intervalLabels = listOf(
-                        stringResource(R.string.interval_1_hour),
-                        stringResource(R.string.interval_1_5_hours),
-                        stringResource(R.string.interval_2_hours),
-                        stringResource(R.string.interval_3_hours)
-                    )
-                    defaultInterval = 120 // Default to 2 hours in production
+                // Update text when intervalMinutes changes externally
+                LaunchedEffect(intervalMinutes) {
+                    intervalText = intervalMinutes.toString()
+                    isError = false
                 }
                 
-                // Initialize with default if current value doesn't match any option
-                if (intervalMinutes !in intervals) {
-                    intervalMinutes = defaultInterval
-                    prefsManager.intervalMinutes = defaultInterval
-                }
-                
-                intervals.forEachIndexed { index, value ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = intervalMinutes == value,
-                            onClick = {
-                                intervalMinutes = value
-                                prefsManager.intervalMinutes = value
-                            },
-                            colors = RadioButtonDefaults.colors(
-                                selectedColor = BrightGreen
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
+                TextField(
+                    value = intervalText,
+                    onValueChange = { newValue ->
+                        // Only allow digits
+                        if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                            intervalText = newValue
+                            
+                            // Validate and save if valid
+                            if (newValue.isEmpty()) {
+                                isError = false
+                                // Don't save empty value, keep current
+                            } else {
+                                try {
+                                    val value = newValue.toInt()
+                                    if (value > 0 && value <= 10000) { // Reasonable upper limit
+                                        intervalMinutes = value
+                                        prefsManager.intervalMinutes = value
+                                        isError = false
+                                    } else if (value <= 0) {
+                                        isError = true
+                                    } else {
+                                        isError = true // Too large
+                                    }
+                                } catch (e: NumberFormatException) {
+                                    isError = true
+                                }
+                            }
+                        }
+                    },
+                    label = {
                         Text(
-                            text = intervalLabels[index],
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = BrightText,
-                            modifier = Modifier.weight(1f)
+                            text = "Interval (minutes)",
+                            color = if (isError) MaterialTheme.colorScheme.error else BrightText
                         )
-                    }
-                }
+                    },
+                    placeholder = {
+                        Text(
+                            text = "e.g., 120",
+                            color = DarkGray
+                        )
+                    },
+                    isError = isError,
+                    supportingText = {
+                        if (isError) {
+                            Text(
+                                text = "Please enter a number between 1 and 10000",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        } else {
+                            Text(
+                                text = "Enter interval in minutes (e.g., 120 for 2 hours)",
+                                color = BrightText.copy(alpha = 0.7f)
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number
+                    ),
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = BrightText,
+                        unfocusedTextColor = BrightText,
+                        focusedContainerColor = DarkGray,
+                        unfocusedContainerColor = DarkGray,
+                        focusedIndicatorColor = BrightGreen,
+                        unfocusedIndicatorColor = DarkGray,
+                        errorIndicatorColor = MaterialTheme.colorScheme.error,
+                        errorLabelColor = MaterialTheme.colorScheme.error,
+                        errorSupportingTextColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
             
             HorizontalDivider(color = DarkGray, thickness = 2.dp)
@@ -313,6 +290,13 @@ fun SettingsScreen(
                             onHourChange = {
                                 quietHoursEnd = it
                                 prefsManager.quietHoursEnd = it
+                                // Reschedule daily reset when quiet hours end time changes
+                                try {
+                                    alarmScheduler.scheduleDailyReset()
+                                    android.util.Log.d("SettingsActivity", "Daily reset rescheduled after quiet hours end change")
+                                } catch (e: Exception) {
+                                    android.util.Log.e("SettingsActivity", "Failed to reschedule daily reset", e)
+                                }
                             }
                         )
                     }
